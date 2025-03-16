@@ -23,6 +23,7 @@ let canvas;
 let bufCanvas;
 let bufCtx;
 
+let daisyGame;
 let drawEngine;
 let gameEngine;
 let scoreDB;

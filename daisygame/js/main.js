@@ -38,6 +38,8 @@ function processKeyEvent(code) {
     case KEY_6:
       gameEngine.press(6);
       break;
+    default:
+      break;
   }
 }
 
@@ -190,7 +192,7 @@ const onLoadPage = function onLoadPageFnc() {
   InitCanvas();
   InitValue();
   //setInterval(OnDraw, 20);
-  setTimeout(OnDraw, 30);
+  setTimeout(OnDraw, 20);
   isMobile = isMobileOS();
 }
 

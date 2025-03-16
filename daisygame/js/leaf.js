@@ -1,13 +1,13 @@
 class Leaf {
     constructor(radius) {
-        this._color = this._color = Math.floor(Math.random() * 6) + 1;
+        this._color = this._color = Math.floor(Math.random() * 7) + 1;
         this._size = radius;
         this._origin_life = 15;
         this._life = 15;
     }
 
     reset() {
-        this._color = Math.floor(Math.random() * 6) + 1;
+        this._color = Math.floor(Math.random() * 7) + 1;
         this._life = this._origin_life;
     }
 
