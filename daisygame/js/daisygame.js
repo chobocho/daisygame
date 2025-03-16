@@ -149,6 +149,7 @@ class DaisyGame {
             return;
         }
 
+        let removedLeaf = 0;
         for (let leaf of this._leafMap[flower]) {
             let left_flower = Math.floor(leaf[0] / 10);
             let left_flower_leaf = leaf[0] % 10;
@@ -159,9 +160,14 @@ class DaisyGame {
                 this._flowerArr[left_flower].leaf[left_flower_leaf].color() === this._flowerArr[right_flower].leaf[right_flower_leaf].color()) {
                 this._flowerArr[left_flower].remove(left_flower_leaf);
                 this._flowerArr[right_flower].remove(right_flower_leaf);
-                this.increaseScore(8);
-                this._audio.play();
+                removedLeaf++;
             }
+        }
+
+        const scoreTable = [0, 1, 20, 50, 80, 100, 256, 0, 0, 0, 0, 0, 0, 0, 0];
+        this.increaseScore(scoreTable[removedLeaf]);
+        if (removedLeaf > 0) {
+            this._audio.play();
         }
     }
 
