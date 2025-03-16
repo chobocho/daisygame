@@ -1,6 +1,7 @@
 class DrawEngine {
-    constructor(game) {
+    constructor(game, images) {
         this.game = game;
+        this._image_res = images.images;
         this._InitValue();
         this._LoadImage();
     }
@@ -10,28 +11,25 @@ class DrawEngine {
     }
 
     _LoadImage() {
-        let root = "./img";
-
         this.background = [];
-        this.background[0] = LoadImage(root + "/background01.jpg");
+        this.background[0] = this._image_res.background;
 
         this.buttonImage = {};
-        this.buttonImage['score'] = LoadImage(root + "/score.png");
-        this.buttonImage['0'] = LoadImage(root + "/sn00.png");
-        this.buttonImage['1'] = LoadImage(root + "/sn01.png");
-        this.buttonImage['2'] = LoadImage(root + "/sn02.png");
-        this.buttonImage['3'] = LoadImage(root + "/sn03.png");
-        this.buttonImage['4'] = LoadImage(root + "/sn04.png");
-        this.buttonImage['5'] = LoadImage(root + "/sn05.png");
-        this.buttonImage['6'] = LoadImage(root + "/sn06.png");
-        this.buttonImage['7'] = LoadImage(root + "/sn07.png");
-        this.buttonImage['8'] = LoadImage(root + "/sn08.png");
-        this.buttonImage['9'] = LoadImage(root + "/sn09.png");
-        this.buttonImage['start'] = LoadImage(root + "/start.png");
-        this.buttonImage['resume'] = LoadImage(root + "/resume.png");
-        this.buttonImage['pause'] = LoadImage(root + "/pause.png");
-        this.circleImage = LoadImage(root + "/circle.png");
-
+        this.buttonImage['score'] = this._image_res.score;
+        this.buttonImage['0'] = this._image_res.n0;
+        this.buttonImage['1'] = this._image_res.n1;
+        this.buttonImage['2'] = this._image_res.n2;
+        this.buttonImage['3'] = this._image_res.n3;
+        this.buttonImage['4'] = this._image_res.n4;
+        this.buttonImage['5'] = this._image_res.n5;
+        this.buttonImage['6'] = this._image_res.n6;
+        this.buttonImage['7'] = this._image_res.n7;
+        this.buttonImage['8'] = this._image_res.n8;
+        this.buttonImage['9'] = this._image_res.n9;
+        this.buttonImage['start'] = this._image_res.start;
+        this.buttonImage['resume'] = this._image_res.resume;
+        this.buttonImage['pause'] = this._image_res.pause;
+        this.circleImage = this._image_res.circle;
         printf("[DrawEngine]", "_LoadImage");
     }
 
@@ -186,7 +184,6 @@ class DrawEngine {
             "rgb(135,206,235)",     // 4 하늘
             "rgb(255,255,0)",       // 5 노랑
             "rgb(144,238,144)",     // 6 연두색
-            "rgb(255,217,179)",     // 7
             "rgb(255,165,0)"        // 8 주황
         ];
 

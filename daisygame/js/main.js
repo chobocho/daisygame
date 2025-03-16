@@ -104,11 +104,14 @@ function touchListener(event) {
 }
 
 function InitValue() {
+  let imageLoader = new ImageLoader();
+  imageLoader.load();
+
   scoreDB = new LocalDB();
-  daisyGame = new DaisyGame(100, 200, scoreDB.getScore(), canvas.width, canvas.height);
+  daisyGame = new DaisyGame(100, 200, scoreDB.getScore());
   daisyGame.init();
   gameEngine = new GameEngine(daisyGame, scoreDB);
-  drawEngine = new DrawEngine(daisyGame);
+  drawEngine = new DrawEngine(daisyGame, imageLoader);
 
   window.onkeydown = KeyPressEvent;
 
@@ -192,7 +195,7 @@ const onLoadPage = function onLoadPageFnc() {
   InitCanvas();
   InitValue();
   //setInterval(OnDraw, 20);
-  setTimeout(OnDraw, 20);
+  setTimeout(OnDraw, 100);
   isMobile = isMobileOS();
 }
 
