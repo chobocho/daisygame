@@ -37,10 +37,12 @@ class DrawEngine {
 
     OnDraw() {
         bufCtx.clearRect(0, 0, canvas.width, canvas.height);
+        bufCtx.beginPath();
         this._drawBoard();
         this._drawScore();
         this._drawFlowers();
         this._drawButton();
+        bufCtx.closePath();
 
         cvs.clearRect(0, 0, canvas.width, canvas.height);
         cvs.drawImage(bufCanvas, gStartX, 0, gBlockSize * 40, gBlockSize * 60);

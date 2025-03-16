@@ -36,6 +36,7 @@ class GameEngine{
   press(key) {
     if (key >= 0 && key <= 6) {
       this._game.turnFlower(key);
+      this._game.resetTick();
       printf("[Flower]", this._game.getFlowers()[key].leaf);
     }
   }

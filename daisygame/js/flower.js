@@ -4,7 +4,7 @@ class Flower {
         this.radius = 0;
         this.x = 0;
         this.y = 0;
-        this.leaf_count = 0;
+        this._leaf_count = 0;
         this.leaf = [];
         this.index = index;
         this._small_radius = 10;
@@ -17,7 +17,11 @@ class Flower {
             // 1부터 5까지의 정수 생성
             this.leaf.push(new Leaf(this._small_radius));
         }
-        this.leaf_count = 6;
+        this._leaf_count = 6;
+    }
+
+    leaf_count() {
+        return this._leaf_count;
     }
 
     small_radius() {
@@ -51,11 +55,11 @@ class Flower {
             return;
         }
         this.leaf[i].remove();
-        this.leaf_count--;
+        this._leaf_count--;
     }
 
-    makeLeaf(flowerArr) {
-        if (this.leaf_count > 3) {
+    addLeaf(flowerArr) {
+        if (this._leaf_count >= 6) {
             return;
         }
 
@@ -69,30 +73,32 @@ class Flower {
             [[62, 5], [61, 14], [63, 50]],
         ];
 
-        for (let i = 0; i < 6; i++) {
-            if (this.leaf[i].color() === 0) {
-                this.leaf[i].reset();
+        let arr = [ 0, 1, 2, 3, 4, 5];
+        arr.sort(() => Math.random() - 0.5);
 
-                for (let leaf of leafMap[this.index]) {
-                    let right_flower = Math.floor(leaf[1] / 10);
-                    let right_leaf = leaf[1] % 10;
+        let isAdd = false;
 
-                    if (flowerArr[right_flower].leaf[right_leaf].isAlive() &&
-                        this.leaf[i].color() === flowerArr[right_flower].leaf[right_leaf].color()) {
-                        let maxCount = 100;
-                        do {
-                            this.leaf[i].reset();
-                            maxCount--;
-                        } while (maxCount > 0 && this.leaf[i].color() === flowerArr[right_flower].leaf[right_leaf].color());
-                        printf("[DaisyGame]", "Changed Color: " + maxCount);
-                    }
+        for (let j = 0; j < 6 && !isAdd; j++) {
+            const i = arr[j];
+            if (this.leaf[i].color() > 0) continue;
+
+            this.leaf[i].reset();
+            for (let leaf of leafMap[this.index]) {
+                let right_flower = Math.floor(leaf[1] / 10);
+                let right_leaf = leaf[1] % 10;
+
+                if (flowerArr[right_flower].leaf[right_leaf].isAlive() &&
+                    this.leaf[i].color() === flowerArr[right_flower].leaf[right_leaf].color()) {
+                    let maxCount = 100;
+                    do {
+                        this.leaf[i].reset();
+                        maxCount--;
+                    } while (maxCount > 0 && this.leaf[i].color() === flowerArr[right_flower].leaf[right_leaf].color());
+                    printf("[DaisyGame]", "Changed Color: " + maxCount);
                 }
-
-                this.leaf_count++;
             }
-            if (this.leaf_count === 5) {
-                return;
-            }
+            this._leaf_count++;
+            isAdd = true;
         }
     }
 }

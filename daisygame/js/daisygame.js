@@ -15,7 +15,6 @@ class DaisyGame {
         this._tick = 0;
         this._score = new Score(highscore);
         this._state = this.IDLE_STATE;
-        this._isTurning = false;
         this._leafMap = [
             [[0, 13], [1, 24], [2, 35], [3, 40], [4, 51], [5, 62]],
             [[12, 25], [14, 61], [13, 0]],
@@ -81,9 +80,14 @@ class DaisyGame {
             "qqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqq" +
             "qqqqqqqqqqqqqqqqqqqqqqqqqqq";
         this._audio = new Audio("data:audio/mp3;base64," + pop_sound);
+        this._addLeafTable = [0, 1, 2, 3, 4, 5, 6, 0, 1, 2, 3, 4, 5, 6];
+        this._addLeafTable.sort(() => Math.random() - 0.5);
+        this._addLeafIndex = 0;
     }
 
     _init_flower() {
+        this._flowerArr = [];
+
         for (let i = 0; i < 7; i++) {
             let f = new Flower(i);
             f.set_index(i);
@@ -92,7 +96,7 @@ class DaisyGame {
 
         let center_x = 200;
         let center_y = 300;
-        let radius = 35;
+        let radius = 30;
 
         // 중앙 꽃 설정
         this._flowerArr[0].set_pos(center_x, center_y, radius);
@@ -131,7 +135,6 @@ class DaisyGame {
     }
 
     init() {
-        this._level = 1;
         this._tick = 0;
         this._x = this._startX;
         this._y = this._startY;
@@ -139,7 +142,6 @@ class DaisyGame {
         this._init_flower();
         this._score.init();
         this._state = this.IDLE_STATE;
-        this._isTurning = false;
     }
 
     turnFlower(flower) {
@@ -147,7 +149,23 @@ class DaisyGame {
             return;
         }
         this._flowerArr[flower].turn();
-        this.checkCollision(flower)
+        this.checkCollision(flower);
+        if (!this._isPlayable()) {
+            this._init_flower();
+        }
+    }
+
+    _isPlayable() {
+        for (let i = 1; i < 7; i++) {
+            for (let left = 0; left < 6; left++) {
+                if (!this._flowerArr[0].leaf[left].isAlive()) return true;
+                for (let right  = 0; right < 6; right++) {
+                    if (!this._flowerArr[i].leaf[right].isAlive()) return true;
+                    if (this._flowerArr[i].leaf[left].color() === this._flowerArr[0].leaf[right].color()) return true;
+                }
+            }
+        }
+        return false;
     }
 
     checkCollision(flower) {
@@ -218,10 +236,27 @@ class DaisyGame {
         }
         this._tick++;
         this._reduceLeaf();
-        if (this._tick > 25) {
+
+        let leaf_count = 0;
+        this._flowerArr.forEach(f => {
+            if (f.leaf_count() == 0) {
+                this.increaseScore(100);
+                for (let i = 0; i < 6; i++) {
+                    f.addLeaf(this._flowerArr);
+                }
+            }
+            leaf_count += f.leaf_count();
+        });
+
+
+        if (this._tick > 60 || leaf_count < 25) {
             this._tick = 0;
-            this._makeLeaf();
+            this._addLeaf();
         }
+    }
+
+    resetTick() {
+        this._tick = 0;
     }
 
     _reduceLeaf() {
@@ -235,13 +270,13 @@ class DaisyGame {
 
     }
 
-    _makeLeaf() {
+    _addLeaf() {
         if (this._state !== this.PLAY_STATE) {
             return;
         }
-        for (let i = 0; i < 7; i++) {
-            this._flowerArr[i].makeLeaf(this._flowerArr);
-        }
+        const flower = this._addLeafTable[this._addLeafIndex];
+        this._addLeafIndex = (this._addLeafIndex + 1) % this._addLeafTable.length;
+        this._flowerArr[flower].addLeaf(this._flowerArr);
     }
 
     x() {
