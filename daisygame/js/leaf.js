@@ -20,7 +20,7 @@ class Leaf {
     }
 
     isAlive() {
-        return this._life == this._origin_life;
+        return this._life === this._origin_life;
     }
 
     remove() {

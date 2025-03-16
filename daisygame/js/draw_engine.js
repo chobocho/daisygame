@@ -3,12 +3,10 @@ class DrawEngine {
         this.game = game;
         this._InitValue();
         this._LoadImage();
-        this._tick = 0;
     }
 
     _InitValue() {
         this.background_image = 0;
-        this._tick = 0;
     }
 
     _LoadImage() {

@@ -12,7 +12,6 @@ class DaisyGame {
         this._canvas_width = canvas_width;
         this._canvas_height = canvas_height;
 
-        this._level = 1;
         this._tick = 0;
         this._score = new Score(highscore);
         this._state = this.IDLE_STATE;
@@ -149,18 +148,6 @@ class DaisyGame {
         }
         this._flowerArr[flower].turn();
         this.checkCollision(flower)
-    }
-
-    isTurning() {
-        if (this._state !== this.PLAY_STATE) return false;
-        return this._isTurning;
-    }
-
-    // For the animation of Bird
-    turn() {
-        if (this._state !== this.PLAY_STATE) {
-            return;
-        }
     }
 
     checkCollision(flower) {

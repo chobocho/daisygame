@@ -2,8 +2,6 @@ class GameEngine{
   constructor(game, db) {
     this._game = game;
     this._scoreDB = db;
-    this._reference_score = 20000;
-    this._start_score = 19000;
   }
 
   increaseTick() {
