@@ -10,7 +10,7 @@ class GameEngine{
     if (!this._game.isPlayState()) {
       return;
     }
-    this._game.turn();
+
     this._game.increaseTick();
 
     if (this._game.isGameOverState()) {

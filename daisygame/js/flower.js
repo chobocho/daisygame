@@ -7,15 +7,15 @@ class Flower {
         this.leaf_count = 0;
         this.leaf = [];
         this.index = 0;
-        this.init_leaf();
         this._small_radius = 10;
+        this.init_leaf();
     }
 
     init_leaf() {
         this.leaf = [];
         for (let i = 0; i < 6; i++) {
             // 1부터 5까지의 정수 생성
-            this.leaf.push(Math.floor(Math.random() * 6) + 1);
+            this.leaf.push(new Leaf(this._small_radius));
         }
         this.leaf_count = 6;
     }
@@ -47,10 +47,10 @@ class Flower {
     }
 
     remove(i) {
-        if (this.leaf[i] === 0) {
+        if (!this.leaf[i].isAlive()) {
             return;
         }
-        this.leaf[i] = 0;
+        this.leaf[i].remove();
         this.leaf_count--;
     }
 
@@ -59,8 +59,8 @@ class Flower {
             return;
         }
         for (let i = 0; i < 6; i++) {
-            if (this.leaf[i] === 0) {
-                this.leaf[i] = Math.floor(Math.random() * 6) + 1;
+            if (this.leaf[i].color() === 0) {
+                this.leaf[i].reset();
                 this.leaf_count++;
             }
             if (this.leaf_count === 5) {

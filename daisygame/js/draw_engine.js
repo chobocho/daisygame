@@ -174,7 +174,7 @@ class DrawEngine {
         let cy = flower.y - flower.radius;
         let size = flower.radius * 2;
         bufCtx.drawImage(this.circleImage, cx, cy, size, size);
-        
+
         let small_circle_radius = flower.small_radius();
 
         // 색상 테이블
@@ -191,15 +191,15 @@ class DrawEngine {
 
         // 잎(leaf)들을 그리기
         for (let i = 0; i < 6; i++) {
-            if (flower.leaf[i] === 0) continue;
+            if (flower.leaf[i].size() === 0) continue;
 
             let angle = 60 * i;
             let radians = angle * Math.PI / 180;
             let x = flower.x + Math.floor((flower.radius + small_circle_radius) * Math.cos(radians));
             let y = flower.y + Math.floor((flower.radius + small_circle_radius) * Math.sin(radians));
             bufCtx.beginPath();
-            bufCtx.arc(x, y, small_circle_radius, 0, 2 * Math.PI);
-            bufCtx.fillStyle = COLOR_TABLE[flower.leaf[i]];
+            bufCtx.arc(x, y, flower.leaf[i].size(), 0, 2 * Math.PI);
+            bufCtx.fillStyle = COLOR_TABLE[flower.leaf[i].color()];
             bufCtx.fill();
             bufCtx.closePath();
         }

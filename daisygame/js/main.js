@@ -2,7 +2,7 @@ function OnDraw() {
   gameEngine.increaseTick();
   drawEngine.OnDraw();
   //updateResolution();
-  setTimeout(OnDraw, 20);
+  setTimeout(OnDraw, 30);
 }
 
 function processKeyEvent(code) {
@@ -190,7 +190,7 @@ const onLoadPage = function onLoadPageFnc() {
   InitCanvas();
   InitValue();
   //setInterval(OnDraw, 20);
-  setTimeout(OnDraw, 20);
+  setTimeout(OnDraw, 30);
   isMobile = isMobileOS();
 }
 
