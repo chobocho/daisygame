@@ -86,7 +86,7 @@ class DaisyGame {
 
     _init_flower() {
         for (let i = 0; i < 7; i++) {
-            let f = new Flower();
+            let f = new Flower(i);
             f.set_index(i);
             this._flowerArr.push(f);
         }
@@ -98,13 +98,32 @@ class DaisyGame {
         // 중앙 꽃 설정
         this._flowerArr[0].set_pos(center_x, center_y, radius);
 
-        // 나머지 꽃들: 60도 간격으로 배치
+        // 나머지 꽃들
         for (let i = 0; i < 6; i++) {
             let angle = 60 * i;
             let radians = angle * Math.PI / 180;
             let x = center_x + Math.floor(radius * 3.5 * Math.cos(radians));
             let y = center_y + Math.floor(radius * 3.5 * Math.sin(radians));
             this._flowerArr[i + 1].set_pos(x, y, radius);
+        }
+
+        // 같은 색상 꽃잎 변경
+        for (let i = 0; i < 7; i++) {
+            for (let leaf of this._leafMap[i]) {
+                let left_flower = Math.floor(leaf[0] / 10);
+                let left_leaf = leaf[0] % 10;
+                let right_flower = Math.floor(leaf[1] / 10);
+                let right_leaf = leaf[1] % 10;
+
+                if (this._flowerArr[left_flower].leaf[left_leaf].color() === this._flowerArr[right_flower].leaf[right_leaf].color()) {
+                    let maxCount = 100;
+                    do {
+                        this._flowerArr[left_flower].leaf[left_leaf].reset();
+                        maxCount--;
+                    } while (maxCount > 0 && this._flowerArr[left_flower].leaf[left_leaf].color() === this._flowerArr[right_flower].leaf[right_leaf].color());
+                    printf("[DaisyGame]", "Changed Color: " + maxCount);
+                }
+            }
         }
     }
 
@@ -234,7 +253,7 @@ class DaisyGame {
             return;
         }
         for (let i = 0; i < 7; i++) {
-            this._flowerArr[i].makeLeaf();
+            this._flowerArr[i].makeLeaf(this._flowerArr);
         }
     }
 
