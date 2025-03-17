@@ -8,6 +8,7 @@ const KEY_4 = 52;
 const KEY_5 = 53
 const KEY_6 = 54;
 
+const M_KEY = 77;
 const P_KEY = 80;
 const S_KEY = 83;
 

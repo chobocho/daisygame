@@ -38,6 +38,9 @@ function processKeyEvent(code) {
     case KEY_6:
       gameEngine.press(6);
       break;
+    case M_KEY:
+      gameEngine.togglePlayMusic();
+      break
     default:
       break;
   }

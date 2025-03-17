@@ -29,7 +29,9 @@ class DrawEngine {
         this.buttonImage['start'] = this._image_res.start;
         this.buttonImage['resume'] = this._image_res.resume;
         this.buttonImage['pause'] = this._image_res.pause;
-        this.circleImage = this._image_res.circle;
+        this.buttonImage['music'] = this._image_res.music;
+        this.buttonImage['mute'] = this._image_res.mute;
+        this.buttonImage['circle'] = this._image_res.circle;
         printf("[DrawEngine]", "_LoadImage");
     }
 
@@ -60,6 +62,12 @@ class DrawEngine {
             this._drawHighScore();
         } else if (this.game.isPlayState()) {
             bufCtx.drawImage(this.buttonImage['pause'], 10, 10, 60, 60);
+            if (this.game.isPlayMusic()) {
+                bufCtx.drawImage(this.buttonImage['music'], 330, 530, 60, 60);
+            } else {
+                bufCtx.drawImage(this.buttonImage['mute'], 330, 530, 60, 60);
+            }
+
         }
     }
 
@@ -139,6 +147,7 @@ class DrawEngine {
                 return S_KEY;
             }
         } else if (this.game.isPlayState()) {
+
             let bx1 = gStartX + 10 * gScale;
             let bx2 = gStartX + 70 * gScale;
             let by1 = 10 * gScale;
@@ -147,6 +156,10 @@ class DrawEngine {
             if (x > bx1 && x < bx2 && y > by1 && y < by2) {
                 return P_KEY;
             }
+
+            if (this._isClickMusicButton(x, y)) {
+                return M_KEY;
+            };
         }
 
         let flowers = this.game.getFlowers();
@@ -157,6 +170,17 @@ class DrawEngine {
         }
 
         return 0;
+    }
+
+    _isClickMusicButton(x, y) {
+        let bx1 = gStartX + 330 * gScale;
+        let bx2 = gStartX + 390 * gScale;
+        let by1 = 530 * gScale;
+        let by2 = 590 * gScale;
+        if (x > bx1 && x < bx2 && y > by1 && y < by2) {
+            return true;
+        }
+        return false;
     }
 
     _drawFlowers() {
@@ -171,7 +195,7 @@ class DrawEngine {
         let cx = flower.x - flower.radius;
         let cy = flower.y - flower.radius;
         let size = flower.radius * 2;
-        bufCtx.drawImage(this.circleImage, cx, cy, size, size);
+        bufCtx.drawImage(this.buttonImage['circle'], cx, cy, size, size);
 
         const small_circle_radius = flower.small_radius();
 

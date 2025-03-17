@@ -27,6 +27,7 @@ class DaisyGame {
         this._addLeafTable = [0, 1, 2, 3, 4, 5, 6, 0, 1, 2, 3, 4, 5, 6];
         this._addLeafTable.sort(() => Math.random() - 0.5);
         this._addLeafIndex = 0;
+        this._isPlayMusic = true;
     }
 
     _init_flower() {
@@ -86,6 +87,14 @@ class DaisyGame {
         this._init_flower();
         this._score.init();
         this._state = this.IDLE_STATE;
+    }
+
+    isPlayMusic() {
+        return this._isPlayMusic;
+    }
+
+    togglePlayMusic() {
+        this._isPlayMusic = !this._isPlayMusic;
     }
 
     turnFlower(flower) {
@@ -161,7 +170,9 @@ class DaisyGame {
         const scoreTable = [0, 1, 20, 50, 80, 100, 256, 0, 0, 0, 0, 0, 0, 0, 0];
         this.increaseScore(scoreTable[removedLeaf]);
         if (removedLeaf > 0) {
-            this._audio.play();
+            if (this.isPlayMusic()) {
+                this._audio.play();
+            }
         }
     }
 

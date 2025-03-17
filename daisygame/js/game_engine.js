@@ -40,4 +40,8 @@ class GameEngine{
       printf("[Flower]", this._game.getFlowers()[key].leaf);
     }
   }
+
+  togglePlayMusic() {
+    this._game.togglePlayMusic();
+  }
 }

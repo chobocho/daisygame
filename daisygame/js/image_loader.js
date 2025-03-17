@@ -22,6 +22,8 @@ class ImageLoader {
         this.images.resume = LoadImage(root + "/resume.png");
         this.images.pause = LoadImage(root + "/pause.png");
         this.images.circle = LoadImage(root + "/circle.png");
+        this.images.music = LoadImage(root + "/music.png");
+        this.images.mute = LoadImage(root + "/mute.png");
         console.log("[ImageLoader] load images!");
     }
 }
