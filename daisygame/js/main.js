@@ -172,9 +172,13 @@ function InitCanvas() {
 }
 
 function DecisionBlockSize() {
-  let screenX = canvas.width / 40;
-  let screenY = canvas.height / 60;
+  let screenX = Math.floor(canvas.width / 41);
+  let screenY = Math.floor(canvas.height / 61);
   gBlockSize = screenX < screenY ? screenX : screenY;
+
+  canvas.width = gBlockSize * 40;
+  canvas.height = gBlockSize * 60;
+
   gStartX = (canvas.width - gBlockSize * 40) / 2;
   gScale = gBlockSize / 10;
   printf("[main] DecisionBlockSize", "gStartX:" + gStartX + ", scale: " + gScale);
