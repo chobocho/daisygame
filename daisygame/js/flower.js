@@ -14,10 +14,9 @@ class Flower {
     init_leaf() {
         this.leaf = [];
         for (let i = 0; i < 6; i++) {
-            // 1부터 5까지의 정수 생성
             this.leaf.push(new Leaf(this._small_radius));
+            this._leaf_count++;
         }
-        this._leaf_count = 6;
     }
 
     leaf_count() {

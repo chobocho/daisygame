@@ -100,17 +100,43 @@ class DaisyGame {
     }
 
     _isPlayable() {
+        // 꽃잎 색상의 저장소
+        let leaf_color = Array.from({ length: 7 }, () => new Set());
+
+        // 모든 꽃을 순회
+        for (let flower of this._flowerArr) {
+            // 각 꽃에 있는 꽃잎의 개수 확인
+            if (flower.leaf_count() < 6) {
+                return true; // 꽃잎이 부족하면 플레이 가능
+            }
+            // 꽃잎의 색상을 저장
+            for (let leaf of flower.leaf) {
+                leaf_color[flower.index].add(leaf.color());
+            }
+        }
+
+        // 이웃한 꽃들 간의 색상 비교
         for (let i = 1; i < 7; i++) {
-            for (let left = 0; left < 6; left++) {
-                if (!this._flowerArr[0].leaf[left].isAlive()) return true;
-                for (let right  = 0; right < 6; right++) {
-                    if (!this._flowerArr[i].leaf[right].isAlive()) return true;
-                    if (this._flowerArr[i].leaf[left].color() === this._flowerArr[0].leaf[right].color()) return true;
+            // 중앙 꽃 (index 0)과 나머지 꽃 비교
+            for (let color of leaf_color[i]) {
+                if (leaf_color[0].has(color)) {
+                    return true; // 동일한 색상이 있으면 플레이 가능
                 }
             }
         }
-        return false;
+
+        // 인접한 두 꽃 사이 (i-1, i) 체크
+        for (let i = 2; i < 7; i++) {
+            for (let color of leaf_color[i]) {
+                if (leaf_color[i - 1].has(color)) {
+                    return true; // 동일한 색상이 있으면 플레이 가능
+                }
+            }
+        }
+
+        return false; // 모든 조건을 통과하지 못하면 플레이 불가
     }
+
 
     checkCollision(flower) {
         if (this._state !== this.PLAY_STATE) {

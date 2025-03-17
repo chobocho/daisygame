@@ -173,10 +173,10 @@ class DrawEngine {
         let size = flower.radius * 2;
         bufCtx.drawImage(this.circleImage, cx, cy, size, size);
 
-        let small_circle_radius = flower.small_radius();
+        const small_circle_radius = flower.small_radius();
 
         // 색상 테이블
-        let COLOR_TABLE = [
+        const COLOR_TABLE = [
             "rgb(0,0,0)",           // 0 검정
             "rgb(255,255,255)",     // 1 흰색
             "rgb(255,182,193)",     // 2 분홍
@@ -184,7 +184,7 @@ class DrawEngine {
             "rgb(135,206,235)",     // 4 하늘
             "rgb(255,255,0)",       // 5 노랑
             "rgb(144,238,144)",     // 6 연두색
-            "rgb(255,165,0)"        // 8 주황
+            "rgb(255,165,0)"        // 7 주황
         ];
 
         // 잎(leaf)들을 그리기
