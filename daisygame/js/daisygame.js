@@ -256,7 +256,7 @@ class DaisyGame {
             leaf_count += f.leaf_count();
         });
 
-        if (this._tick > 60 || leaf_count < 15) {
+        if (this._tick > 60 || leaf_count < 21) {
             this._tick = 0;
             this._addLeaf();
         }
