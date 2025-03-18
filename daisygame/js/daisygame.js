@@ -23,7 +23,8 @@ class DaisyGame {
             [[62, 5], [61, 14], [63, 50]],
         ];
         this._flowerArr = [];
-        this._audio = new Audio("data:audio/mp3;base64," + pop_sound);
+        this._pop_audio = new Audio("data:audio/mp3;base64," + pop_sound);
+        this._clear_audio = new Audio("data:audio/mp3;base64," + clear_sound);
         this._addLeafTable = [0, 1, 2, 3, 4, 5, 6, 0, 1, 2, 3, 4, 5, 6];
         this._addLeafTable.sort(() => Math.random() - 0.5);
         this._addLeafIndex = 0;
@@ -143,6 +144,12 @@ class DaisyGame {
             }
         }
 
+        for (let color of leaf_color[1]) {
+            if (leaf_color[6].has(color)) {
+                return true; // 동일한 색상이 있으면 플레이 가능
+            }
+        }
+
         return false; // 모든 조건을 통과하지 못하면 플레이 불가
     }
 
@@ -160,6 +167,7 @@ class DaisyGame {
             let right_flower_leaf = leaf[1] % 10;
 
             if (this._flowerArr[left_flower].leaf[left_flower_leaf].isAlive() &&
+                this._flowerArr[right_flower].leaf[right_flower_leaf].isAlive() &&
                 this._flowerArr[left_flower].leaf[left_flower_leaf].color() === this._flowerArr[right_flower].leaf[right_flower_leaf].color()) {
                 this._flowerArr[left_flower].remove(left_flower_leaf);
                 this._flowerArr[right_flower].remove(right_flower_leaf);
@@ -167,11 +175,31 @@ class DaisyGame {
             }
         }
 
-        const scoreTable = [0, 1, 20, 50, 80, 100, 256, 0, 0, 0, 0, 0, 0, 0, 0];
+        const scoreTable = [0, 1, 10, 20, 50, 128, 256, 0, 0, 0, 0, 0, 0, 0];
         this.increaseScore(scoreTable[removedLeaf]);
-        if (removedLeaf > 0) {
-            if (this.isPlayMusic()) {
-                this._audio.play();
+
+        if (removedLeaf === 0) return;
+        this._playEffectSound();
+    }
+
+    _playEffectSound() {
+        let needToPlayClearSound = false;
+        const scoreTable = [0, 100, 256, 512, 600, 800, 1024, 1216, 0, 0, 0, 0, 0, 0];
+        let count = 0;
+        for (let leaf of this._flowerArr){
+            if (leaf.leaf_count() === 0) {
+                count++;
+                needToPlayClearSound = true;
+            }
+        }
+
+        this.increaseScore(scoreTable[count]);
+
+        if (this.isPlayMusic()) {
+            if (needToPlayClearSound) {
+                this._clear_audio.play();
+            } else {
+                this._pop_audio.play();
             }
         }
     }
@@ -221,7 +249,6 @@ class DaisyGame {
         let leaf_count = 0;
         this._flowerArr.forEach(f => {
             if (f.leaf_count() == 0) {
-                this.increaseScore(100);
                 for (let i = 0; i < 6; i++) {
                     f.addLeaf(this._flowerArr);
                 }
@@ -229,7 +256,7 @@ class DaisyGame {
             leaf_count += f.leaf_count();
         });
 
-        if (this._tick > 60 || leaf_count < 25) {
+        if (this._tick > 60 || leaf_count < 15) {
             this._tick = 0;
             this._addLeaf();
         }
