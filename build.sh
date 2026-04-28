@@ -63,6 +63,7 @@ SCRIPTS=(
   audio.js
   values.js
   effects.js
+  puzzle.js
   score.js
   leaf.js
   flower.js

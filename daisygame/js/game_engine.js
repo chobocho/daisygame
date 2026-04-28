@@ -62,4 +62,24 @@ class GameEngine{
     this._scoreDB.clearResume();
     this._game.init();
   }
+
+  retryPuzzleLevel() {
+    const lvl = this._game.puzzleLevel();
+    if (lvl > 0) {
+      this._scoreDB.clearResume();
+      this._game.playPuzzleLevel(lvl);
+    }
+  }
+
+  nextPuzzleLevel() {
+    const lvl = this._game.puzzleLevel();
+    if (lvl > 0 && lvl < Puzzle.MAX_LEVEL) {
+      const prog = this._game.puzzleProgress();
+      const target = lvl + 1;
+      if (!prog || prog.isUnlocked(target)) {
+        this._scoreDB.clearResume();
+        this._game.playPuzzleLevel(target);
+      }
+    }
+  }
 }

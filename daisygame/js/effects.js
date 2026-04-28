@@ -82,7 +82,7 @@ Effects.particles = [];
 Effects.MAX_POPUPS = 8;
 Effects.MAX_PARTICLES = 80;
 Effects.MAX_CALLOUTS = 3;
-// Pastel particle colors keyed by Leaf.color() index 1..6.
+// Pastel particle colors keyed by Leaf.color() index 1..7.
 Effects.PARTICLE_COLOR = [
     "#FFFFFF", // 0 unused
     "#FFFFFF", // 1 white
@@ -91,4 +91,5 @@ Effects.PARTICLE_COLOR = [
     "#87CEEB", // 4 sky
     "#FFE94D", // 5 yellow
     "#90EE90", // 6 green
+    "#FFA559", // 7 orange (used at high puzzle levels)
 ];

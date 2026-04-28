@@ -18,7 +18,7 @@ function read(file) {
 }
 
 // Files that have no DOM dependency.
-const CORE_FILES = ["util.js", "effects.js", "score.js", "leaf.js", "flower.js"];
+const CORE_FILES = ["util.js", "effects.js", "puzzle.js", "score.js", "leaf.js", "flower.js"];
 
 // Source fragment that wires a Map-backed localStorage stub into the IIFE.
 // Tests reach the underlying Map (`_store`) via the returned object so they
@@ -39,7 +39,7 @@ function loadCore() {
     const console = { log() {}, warn() {}, error() {} };
     ${STORAGE_STUB}
     ${CORE_FILES.map(read).join("\n\n")}
-    return { Score, Leaf, Flower, Effects, LocalDB, _store, localStorage };
+    return { Score, Leaf, Flower, Effects, Puzzle, PuzzleProgress, LocalDB, _store, localStorage };
   `;
   return new Function(body)();
 }
@@ -55,7 +55,7 @@ function loadGame() {
   `;
   // values.js declares mode IDs (MODE_ARCADE/PUZZLE/ENDLESS); load it so the
   // tests can reference the same constants the production code uses.
-  const files = ["util.js", "effects.js", "score.js", "leaf.js", "flower.js", "values.js", "daisygame.js", "game_engine.js", "draw_engine.js"];
+  const files = ["util.js", "effects.js", "puzzle.js", "score.js", "leaf.js", "flower.js", "values.js", "daisygame.js", "game_engine.js", "draw_engine.js"];
   const body = `
     "use strict";
     const console = { log() {}, warn() {}, error() {} };
@@ -63,7 +63,8 @@ function loadGame() {
     ${stubs}
     ${files.map(read).join("\n\n")}
     return {
-      Score, Leaf, Flower, Effects, DaisyGame, GameEngine, DrawEngine, LocalDB,
+      Score, Leaf, Flower, Effects, Puzzle, PuzzleProgress,
+      DaisyGame, GameEngine, DrawEngine, LocalDB,
       MODE_ARCADE, MODE_PUZZLE, MODE_ENDLESS,
       _store, localStorage,
     };

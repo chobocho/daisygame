@@ -195,6 +195,62 @@ test("DaisyGame: endless mode does refill cleared flowers", () => {
   assert.ok(flowers[0].leaf_count() > 0, "endless must refill an empty flower");
 });
 
+// ---------- puzzle mode levels ----------
+
+test("DaisyGame: start(MODE_PUZZLE) enters LEVEL_SELECT instead of PLAY", () => {
+  const g = fresh();
+  g.start(MODE_PUZZLE);
+  assert.equal(g.isLevelSelectState(), true);
+  assert.equal(g.isPlayState(), false);
+});
+
+test("DaisyGame: playPuzzleLevel(1) sets up 2 flowers, 4 colors, target 50", () => {
+  const g = fresh();
+  g.playPuzzleLevel(1);
+  assert.equal(g.isPlayState(), true);
+  assert.equal(g.puzzleLevel(), 1);
+  assert.equal(g.getFlowers().length, 2);
+  // Each leaf color must be in 1..4
+  for (const f of g.getFlowers()) {
+    for (const l of f.leaf) {
+      assert.ok(l.color() >= 1 && l.color() <= 4, `color ${l.color()} out of 1..4`);
+    }
+  }
+});
+
+test("DaisyGame: playPuzzleLevel(100) sets up 7 flowers, 7 colors", () => {
+  const g = fresh();
+  g.playPuzzleLevel(100);
+  assert.equal(g.getFlowers().length, 7);
+  for (const f of g.getFlowers()) {
+    for (const l of f.leaf) {
+      assert.ok(l.color() >= 1 && l.color() <= 7, `color ${l.color()} out of 1..7`);
+    }
+  }
+});
+
+test("DaisyGame: puzzle level timer counts down each tick", () => {
+  const g = fresh();
+  g.playPuzzleLevel(1);
+  const before = g._timerTicks;
+  g.increaseTick();
+  assert.equal(g._timerTicks, before - 1);
+});
+
+test("DaisyGame: puzzle timer expiry transitions to GAME_OVER", () => {
+  const g = fresh();
+  g.playPuzzleLevel(1);
+  g._timerTicks = 1;
+  g.increaseTick();
+  assert.equal(g.isGameOverState(), true);
+});
+
+test("DaisyGame: puzzleLevel returns 0 outside puzzle mode", () => {
+  const g = fresh();
+  g.start(MODE_ENDLESS);
+  assert.equal(g.puzzleLevel(), 0);
+});
+
 // ---------- mixed rotation directions ----------
 
 test("DaisyGame: _init_flower assigns at least 2 CW and 2 CCW directions", () => {
@@ -273,8 +329,9 @@ test("DaisyGame.restore: graceful failure on schema version mismatch", () => {
 
 test("DaisyGame.restore: graceful failure when flowers array is wrong length", () => {
   const g = fresh();
-  const broken = { v: 1, mode: 0, flowers: [{}, {}, {}] };
-  assert.equal(g.restore(broken), false);
+  // Now valid sizes are 1..7 (puzzle level 1 has 2 flowers). 0 and 8+ should fail.
+  assert.equal(g.restore({ v: 1, mode: 0, flowers: [] }), false);
+  assert.equal(g.restore({ v: 1, mode: 0, flowers: new Array(8).fill({}) }), false);
 });
 
 test("DaisyGame.restore: graceful failure when mode is non-numeric", () => {
@@ -285,7 +342,7 @@ test("DaisyGame.restore: graceful failure when mode is non-numeric", () => {
 
 test("DaisyGame: puzzle going non-playable transitions to GAME_OVER on next tap", () => {
   const g = fresh();
-  g.start(MODE_PUZZLE);
+  g.playPuzzleLevel(1);
   // Force an unwinnable state: every leaf gets the same isolated color and
   // _isPlayable's neighbor-color check fails after the turn.
   // Easiest path: clear every leaf so there are zero matches possible.

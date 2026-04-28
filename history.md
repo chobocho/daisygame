@@ -434,7 +434,89 @@ static arrowColorFor(direction: number): string {
 - −1 외의 모든 입력(0, 2, NaN) → CW로 폴백
 - CW 색과 CCW 색이 서로 다름 (식별 가능 보장)
 
-## 18. 후속 후보
+## 18. 퍼즐 모드 — 100 레벨 / 별 등급 / 타임 어택 / 진행 영속화
+
+피드백: "퍼즐모드가 부실해" — 100가지 레벨, 레벨별 목표 점수 + 타임 어택, 별 3개 등급, 단계별 잠금, 이전 레벨 재도전, 레벨별 최고 점수 DB 영속화.
+
+### 18.1 레벨 설계 (deterministic)
+
+```js
+flowers(L) = clamp(2 + Math.floor((L-1) / 17), 2, 7)
+  L1-17:2 / L18-34:3 / L35-51:4 / L52-68:5 / L69-85:6 / L86-100:7
+colors(L)  = clamp(4 + Math.floor((L-1) / 33), 4, 7)
+  L1-33:4 / L34-66:5 / L67-99:6 / L100:7
+time(L)    = 90 - Math.floor((L-1) * 60 / 99) seconds   // 90s → 30s
+target(L)  = 50 * L                                      // L1:50, L100:5000
+```
+
+별 등급: `score < target` → 0★(실패) / `< 1.5×` → 1★ / `< 2×` → 2★ / 그 외 → 3★
+
+### 18.2 신규 모듈 `js/puzzle.js`
+
+- `Puzzle.levelConfig(L)` — 위 식 그대로, [1,100] 범위 클램프
+- `Puzzle.starRating(score, target)` — 0–3 별
+- `PuzzleProgress` 클래스 — `localStorage` 키 `DaisyPuzzle`에 `{ v, unlocked, best }` JSON 영속화. 손상/없음 시 신규 상태로 폴백
+  - `unlocked()`, `isUnlocked(L)`, `bestScore(L)`, `stars(L)`
+  - `recordResult(L, score)` — best 갱신 + 클리어이면서 frontier일 때만 unlock+1, MAX_LEVEL에서 정지
+
+### 18.3 가변 N (꽃 수) / 가변 색 수
+
+- `Leaf(radius, colorCount=6)` — `_colorTable = [1..colorCount]`
+- `Flower(index, colorCount=6)` — Leaf로 전달
+- `DaisyGame._flowerCount` / `_colorCount` 멤버, `_init_flower`가 N개 꽃 생성·기존 hex 슬롯 첫 N개 사용·`FULL_LEAF_MAP`을 N에 맞게 필터·동색 충돌 해소·CW/CCW 분배(N≥4면 ≥2 보장)
+- `_isPlayable` 일반화 — leafMap에서 인접 꽃 쌍 도출 후 색 교집합 검사 (모든 N에 작동)
+- 색상 7번(`#FFA559`) 추가: `Effects.PARTICLE_COLOR`, `DrawEngine.PETAL_COLORS`
+
+### 18.4 상태머신 + 퍼즐 흐름
+
+- 새 상태 `LEVEL_SELECT_STATE = 4` + `isLevelSelectState()`
+- `start(MODE_PUZZLE)` → IDLE에서 LEVEL_SELECT로 진입 (PLAY 직접 안 감)
+- `playPuzzleLevel(L)` — 보드 N/색/타이머/스코어 리셋 → PLAY로
+- `levelSelectPrev/Next/Play` — 좌/우 화살표·Play 버튼 동작
+- 퍼즐 PLAY 타이머는 arcade와 같은 카운트다운; 0 도달 시 `_enterGameOver()`
+- `_enterGameOver`가 퍼즐 모드면 `puzzleProgress.recordResult(L, score)` 호출
+- `puzzleLevel()` / `puzzleProgress()` 게터 (FlowerLike-style 인터페이스)
+
+### 18.5 GameEngine 확장
+
+- `retryPuzzleLevel()` — 같은 레벨 다시 (resume 슬롯 삭제 후 `playPuzzleLevel`)
+- `nextPuzzleLevel()` — frontier가 다음 레벨까지 unlock된 경우만 진행
+
+### 18.6 키 라우팅 (`main.js` + `values.js`)
+
+- 신규 키 코드: `NAV_PREV_KEY=205`, `NAV_NEXT_KEY=206`, `NEXT_LEVEL_KEY=207`
+- 키보드: ←/→ 로 레벨 탐색, ENTER/S = 컨텍스트(PAUSE→resume, LEVEL_SELECT→play, PUZZLE GAME_OVER→retry, 그 외→endless)
+
+### 18.7 UI (`draw_engine.ts`)
+
+- **Level Select 화면**:
+  - 정보 패널 (호박 외곽선 + 크림 배경): "Level X" / "Target T · Time Ts" / "Flowers F · Colors C" / "Best B"
+  - 별 ★★☆ (반경 14px, 18 채움/공)
+  - ◀ 둥근 버튼 (cx=70) · Play 버튼 (cx=200) · ▶ 둥근 버튼 (cx=330) — 잠긴 레벨엔 Play 위에 🔒
+  - 하단 "Main Menu" 버튼
+- **퍼즐 PLAY HUD**: 좌상단 `Lv X · Target T` 텍스트 (기존 우상단 SCORE + 상단 중앙 타이머에 추가)
+- **퍼즐 GAME_OVER**:
+  - 워드마크 "Cleared!" / "Failed"
+  - 별 ★★★ (반경 18px)
+  - "Score X / Target T" + "Best B"
+  - 클리어 시: Next Level (녹색) + Retry (주황) — 실패 시: Retry만
+  - 하단 "Main Menu"
+- 추가 헬퍼: `_drawStars`, `_drawStar` (path 기반 5각 별), `_drawArrowButton`
+
+### 18.8 Resume 통합
+
+- DaisyGame.serialize에 `puzzleLevel` / `flowerCount` / `colorCount` 추가
+- restore — 1..7 꽃을 받아 동적으로 flower array 재생성 + leafMap 서브셋 재구성
+- 퍼즐 진행 중 일시정지/이탈 → 같은 레벨로 복귀
+
+### 18.9 테스트 (111건, +24)
+
+- `puzzle.test.js` (신규): levelConfig 경계/단계 (5건), starRating (4건), PuzzleProgress 신규/클리어/실패/베스트/영속화/손상/캡/regress방지/stars (9건)
+- `daisygame.test.js`: `start(MODE_PUZZLE)` → LEVEL_SELECT, `playPuzzleLevel(1)` 2송이 4색, `playPuzzleLevel(100)` 7송이 7색, 퍼즐 타이머 카운트다운 + 만료 GAME_OVER, `puzzleLevel()` 비-퍼즐 0 (6건)
+
+총 87 → **111건**.
+
+## 19. 후속 후보
 
 - 남은 JS 파일들도 점진적으로 .ts로 이식 (현재는 ambient 선언으로 우회 중)
 - `flower.js` / `leaf.js` 인덱스 0–6 / 1–6 매핑을 자료구조로 분리해 가독성 정리

@@ -23,6 +23,9 @@ const MODE_ARCADE_KEY = 201;
 const MODE_PUZZLE_KEY = 202;
 const MODE_ENDLESS_KEY = 203;
 const MENU_KEY = 204;
+const NAV_PREV_KEY = 205;
+const NAV_NEXT_KEY = 206;
+const NEXT_LEVEL_KEY = 207;
 
 let gStartX = 0;
 let gBlockSize = 60;

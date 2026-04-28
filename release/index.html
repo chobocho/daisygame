@@ -180,6 +180,9 @@ const MODE_ARCADE_KEY = 201;
 const MODE_PUZZLE_KEY = 202;
 const MODE_ENDLESS_KEY = 203;
 const MENU_KEY = 204;
+const NAV_PREV_KEY = 205;
+const NAV_NEXT_KEY = 206;
+const NEXT_LEVEL_KEY = 207;
 
 let gStartX = 0;
 let gBlockSize = 60;
@@ -292,7 +295,7 @@ Effects.particles = [];
 Effects.MAX_POPUPS = 8;
 Effects.MAX_PARTICLES = 80;
 Effects.MAX_CALLOUTS = 3;
-// Pastel particle colors keyed by Leaf.color() index 1..6.
+// Pastel particle colors keyed by Leaf.color() index 1..7.
 Effects.PARTICLE_COLOR = [
     "#FFFFFF", // 0 unused
     "#FFFFFF", // 1 white
@@ -301,7 +304,110 @@ Effects.PARTICLE_COLOR = [
     "#87CEEB", // 4 sky
     "#FFE94D", // 5 yellow
     "#90EE90", // 6 green
+    "#FFA559", // 7 orange (used at high puzzle levels)
 ];
+
+</script>
+<script>
+// 100-level puzzle progression. Pure config + a tiny localStorage-backed
+// progress tracker. Loaded before daisygame.js / game_engine.js.
+
+class Puzzle {
+    static MAX_LEVEL = 100;
+    static STORAGE_KEY = 'DaisyPuzzle';
+
+    // Returns the deterministic config for a level (clamped to [1, 100]).
+    //   flowers: 2 → 7 in steps of 17 levels
+    //   colors:  4 → 7 in steps of 33 levels
+    //   time:    90s → 30s linearly
+    //   target:  50 * level (L1 = 50, L100 = 5000)
+    static levelConfig(level) {
+        const L = Math.max(1, Math.min(Puzzle.MAX_LEVEL, level | 0));
+        return {
+            level: L,
+            flowers: Math.min(7, 2 + Math.floor((L - 1) / 17)),
+            colors:  Math.min(7, 4 + Math.floor((L - 1) / 33)),
+            timeSeconds: 90 - Math.floor((L - 1) * 60 / 99),
+            target: 50 * L,
+        };
+    }
+
+    // 0..3 stars based on score / target ratio. 0 = failed.
+    static starRating(score, target) {
+        if (score < target) return 0;
+        if (score < target * 1.5) return 1;
+        if (score < target * 2) return 2;
+        return 3;
+    }
+}
+
+class PuzzleProgress {
+    constructor() {
+        this._unlocked = 1;
+        this._best = {};
+        this._load();
+    }
+
+    _load() {
+        let raw;
+        try { raw = localStorage.getItem(Puzzle.STORAGE_KEY); }
+        catch (e) { return; }
+        if (!raw) return;
+        try {
+            const parsed = JSON.parse(raw);
+            if (!parsed || typeof parsed !== 'object' || parsed.v !== 1) return;
+            if (typeof parsed.unlocked === 'number') {
+                this._unlocked = Math.max(1, Math.min(Puzzle.MAX_LEVEL, parsed.unlocked | 0));
+            }
+            if (parsed.best && typeof parsed.best === 'object') {
+                for (const k of Object.keys(parsed.best)) {
+                    const lv = +k;
+                    const score = +parsed.best[k];
+                    if (Number.isFinite(lv) && lv >= 1 && lv <= Puzzle.MAX_LEVEL && Number.isFinite(score)) {
+                        this._best[lv] = score | 0;
+                    }
+                }
+            }
+        } catch (e) {
+            // corrupt JSON — keep fresh defaults
+        }
+    }
+
+    _persist() {
+        try {
+            localStorage.setItem(Puzzle.STORAGE_KEY, JSON.stringify({
+                v: 1,
+                unlocked: this._unlocked,
+                best: this._best,
+            }));
+        } catch (e) {
+            // best-effort
+        }
+    }
+
+    unlocked() { return this._unlocked; }
+    isUnlocked(level) { return level >= 1 && level <= this._unlocked; }
+    bestScore(level) { return this._best[level] | 0; }
+    stars(level) {
+        const target = Puzzle.levelConfig(level).target;
+        return Puzzle.starRating(this.bestScore(level), target);
+    }
+
+    recordResult(level, score) {
+        if (level < 1 || level > Puzzle.MAX_LEVEL) return;
+        const s = score | 0;
+        const target = Puzzle.levelConfig(level).target;
+        const cleared = s >= target;
+
+        if (s > (this._best[level] | 0)) {
+            this._best[level] = s;
+        }
+        if (cleared && level === this._unlocked && level < Puzzle.MAX_LEVEL) {
+            this._unlocked = level + 1;
+        }
+        this._persist();
+    }
+}
 
 </script>
 <script>
@@ -359,8 +465,10 @@ class Score {
 </script>
 <script>
 class Leaf {
-    constructor(radius) {
-        this._colorTable = [1, 2, 3, 4, 5, 6];
+    constructor(radius, colorCount = 6) {
+        const c = Math.max(1, Math.min(7, colorCount | 0));
+        this._colorTable = [];
+        for (let i = 1; i <= c; i++) this._colorTable.push(i);
         this._colorTable.sort(() => Math.random() - 0.5);
         this._colorIdx = 0;
         this._color = this._colorTable[this._colorIdx];
@@ -429,7 +537,7 @@ class Leaf {
 </script>
 <script>
 class Flower {
-    constructor(index) {
+    constructor(index, colorCount = 6) {
         this.color = "rgb(255,165,0)"; // 주황색
         this.radius = 0;
         this.x = 0;
@@ -438,6 +546,7 @@ class Flower {
         this.leaf = [];
         this.index = index;
         this._small_radius = 10;
+        this._color_count = colorCount;
         // Rotation direction applied by turn(). 1 = clockwise (visually
         // unshift(pop())), -1 = counter-clockwise (push(shift())).
         // Crazy Daisy mixes both flower types on the board.
@@ -456,7 +565,7 @@ class Flower {
     init_leaf() {
         this.leaf = [];
         for (let i = 0; i < 6; i++) {
-            this.leaf.push(new Leaf(this._small_radius));
+            this.leaf.push(new Leaf(this._small_radius, this._color_count));
             this._leaf_count++;
         }
     }
@@ -592,6 +701,7 @@ class DaisyGame {
         this.PLAY_STATE = 1;
         this.PAUSE_STATE = 2;
         this.GAME_OVER_STATE = 3;
+        this.LEVEL_SELECT_STATE = 4;
 
         this.MODE_ARCADE = 0;
         this.MODE_PUZZLE = 1;
@@ -600,6 +710,10 @@ class DaisyGame {
         // Tick rate is ~30ms, so 90 sec = 3000 ticks.
         this.ARCADE_TICKS = 3000;
         this._timerTicks = 0;
+        this._flowerCount = 7;
+        this._colorCount = 6;
+        this._puzzleLevel = 0;
+        this._puzzleProgress = (typeof PuzzleProgress !== 'undefined') ? new PuzzleProgress() : null;
 
         this._startX = startX;
         this._startY = startY;
@@ -609,7 +723,8 @@ class DaisyGame {
         this._tick = 0;
         this._score = new Score(highscore);
         this._state = this.IDLE_STATE;
-        this._leafMap = [
+        // Static 7-flower hex adjacency. _init_flower(N) filters this down.
+        this.FULL_LEAF_MAP = [
             [[0, 13], [1, 24], [2, 35], [3, 40], [4, 51], [5, 62]],
             [[12, 25], [14, 61], [13, 0]],
             [[23, 30], [24, 1], [25, 12]],
@@ -618,6 +733,7 @@ class DaisyGame {
             [[50, 63], [52, 45], [51, 4]],
             [[62, 5], [61, 14], [63, 50]],
         ];
+        this._leafMap = this.FULL_LEAF_MAP;
         this._flowerArr = [];
         this._pop_audio = new Audio("data:audio/mp3;base64," + pop_sound);
         this._clear_audio = new Audio("data:audio/mp3;base64," + clear_sound);
@@ -628,10 +744,14 @@ class DaisyGame {
     }
 
     _init_flower() {
-        this._flowerArr = [];
+        const N = Math.max(2, Math.min(7, this._flowerCount | 0 || 7));
+        const C = Math.max(1, Math.min(7, this._colorCount | 0 || 6));
+        this._flowerCount = N;
+        this._colorCount = C;
 
-        for (let i = 0; i < 7; i++) {
-            let f = new Flower(i);
+        this._flowerArr = [];
+        for (let i = 0; i < N; i++) {
+            let f = new Flower(i, C);
             f.set_index(i);
             this._flowerArr.push(f);
         }
@@ -639,30 +759,40 @@ class DaisyGame {
         let center_x = 200;
         let center_y = 300;
         let radius = 30;
-
-        // 중앙 꽃 설정
-        this._flowerArr[0].set_pos(center_x, center_y, radius);
-
-        // 나머지 꽃들
-        for (let i = 0; i < 6; i++) {
-            let angle = 60 * i;
+        // Same hex slots as the original 7-flower layout; for N < 7 we just
+        // populate the first N slots (center + first N-1 ring positions).
+        if (N >= 1) this._flowerArr[0].set_pos(center_x, center_y, radius);
+        for (let i = 1; i < N; i++) {
+            let angle = 60 * (i - 1);
             let radians = angle * Math.PI / 180;
             let x = center_x + Math.floor(radius * 3.5 * Math.cos(radians));
             let y = center_y + Math.floor(radius * 3.5 * Math.sin(radians));
-            this._flowerArr[i + 1].set_pos(x, y, radius);
+            this._flowerArr[i].set_pos(x, y, radius);
         }
 
-        // 회전 방향 분배: 7송이 중 최소 2개 시계방향, 최소 2개 반시계방향,
-        // 나머지 3개는 매 게임마다 랜덤. [CW, CW, CCW, CCW, ?, ?, ?]를 셔플.
-        const dirs = [1, 1, -1, -1];
-        for (let i = 0; i < 3; i++) dirs.push(Math.random() < 0.5 ? 1 : -1);
+        // Subset of FULL_LEAF_MAP with both endpoints below N.
+        this._leafMap = [];
+        for (let i = 0; i < N; i++) {
+            this._leafMap[i] = this.FULL_LEAF_MAP[i].filter(([a, b]) =>
+                Math.floor(a / 10) < N && Math.floor(b / 10) < N);
+        }
+
+        // Direction distribution: at least 2 CW + 2 CCW for N >= 4, else random.
+        let dirs;
+        if (N >= 4) {
+            dirs = [1, 1, -1, -1];
+            for (let i = 0; i < N - 4; i++) dirs.push(Math.random() < 0.5 ? 1 : -1);
+        } else {
+            dirs = [];
+            for (let i = 0; i < N; i++) dirs.push(Math.random() < 0.5 ? 1 : -1);
+        }
         dirs.sort(() => Math.random() - 0.5);
-        for (let i = 0; i < 7; i++) {
+        for (let i = 0; i < N; i++) {
             this._flowerArr[i].set_direction(dirs[i]);
         }
 
         // 같은 색상 꽃잎 변경
-        for (let i = 0; i < 7; i++) {
+        for (let i = 0; i < N; i++) {
             for (let leaf of this._leafMap[i]) {
                 let left_flower = Math.floor(leaf[0] / 10);
                 let left_leaf = leaf[0] % 10;
@@ -679,6 +809,12 @@ class DaisyGame {
                 }
             }
         }
+
+        // Rebuild addLeafTable to match active flower count.
+        this._addLeafTable = [];
+        for (let i = 0; i < N; i++) this._addLeafTable.push(i, i);
+        this._addLeafTable.sort(() => Math.random() - 0.5);
+        this._addLeafIndex = 0;
     }
 
     getFlowers() {
@@ -712,7 +848,7 @@ class DaisyGame {
         this.checkCollision(flower);
         if (!this._isPlayable()) {
             if (this._mode === this.MODE_PUZZLE) {
-                this._state = this.GAME_OVER_STATE;
+                this._enterGameOver();
             } else {
                 this._init_flower();
             }
@@ -720,47 +856,36 @@ class DaisyGame {
     }
 
     _isPlayable() {
-        // 꽃잎 색상의 저장소
-        let leaf_color = Array.from({ length: 7 }, () => new Set());
+        const N = this._flowerArr.length;
+        const leaf_color = Array.from({ length: N }, () => new Set());
 
-        // 모든 꽃을 순회
         for (let flower of this._flowerArr) {
-            // 각 꽃에 있는 꽃잎의 개수 확인
             if (flower.leaf_count() < 6) {
-                return true; // 꽃잎이 부족하면 플레이 가능
+                return true;
             }
-            // 꽃잎의 색상을 저장
             for (let leaf of flower.leaf) {
                 leaf_color[flower.index].add(leaf.color());
             }
         }
 
-        // 이웃한 꽃들 간의 색상 비교
-        for (let i = 1; i < 7; i++) {
-            // 중앙 꽃 (index 0)과 나머지 꽃 비교
-            for (let color of leaf_color[i]) {
-                if (leaf_color[0].has(color)) {
-                    return true; // 동일한 색상이 있으면 플레이 가능
+        // Derive flower-pair adjacency from the active leaf map and check
+        // for shared colors. Works for any N because _leafMap is already
+        // filtered to active flowers in _init_flower.
+        const seen = new Set();
+        for (const pairs of this._leafMap) {
+            for (const [a, b] of pairs) {
+                const fa = Math.floor(a / 10);
+                const fb = Math.floor(b / 10);
+                if (fa === fb) continue;
+                const key = fa < fb ? (fa * 10 + fb) : (fb * 10 + fa);
+                if (seen.has(key)) continue;
+                seen.add(key);
+                for (const c of leaf_color[fa]) {
+                    if (leaf_color[fb].has(c)) return true;
                 }
             }
         }
-
-        // 인접한 두 꽃 사이 (i-1, i) 체크
-        for (let i = 2; i < 7; i++) {
-            for (let color of leaf_color[i]) {
-                if (leaf_color[i - 1].has(color)) {
-                    return true; // 동일한 색상이 있으면 플레이 가능
-                }
-            }
-        }
-
-        for (let color of leaf_color[1]) {
-            if (leaf_color[6].has(color)) {
-                return true; // 동일한 색상이 있으면 플레이 가능
-            }
-        }
-
-        return false; // 모든 조건을 통과하지 못하면 플레이 불가
+        return false;
     }
 
 
@@ -863,17 +988,86 @@ class DaisyGame {
         if (mode !== undefined) {
             this._mode = mode;
         }
+
+        // Puzzle mode opens the level-select screen instead of starting play.
+        // The level-select UI then calls playPuzzleLevel(L) to begin a level.
+        if (this._mode === this.MODE_PUZZLE) {
+            if (this._puzzleProgress) {
+                this._puzzleLevel = this._puzzleProgress.unlocked();
+            } else {
+                this._puzzleLevel = 1;
+            }
+            this._state = this.LEVEL_SELECT_STATE;
+            return;
+        }
+
         this._timerTicks = (this._mode === this.MODE_ARCADE) ? this.ARCADE_TICKS : 0;
+        this._flowerCount = 7;
+        this._colorCount = 6;
+        // Reinit flowers for non-puzzle modes so a previous puzzle session
+        // doesn't leave a 2-flower board behind.
+        this._init_flower();
         this._state = this.PLAY_STATE;
+    }
+
+    playPuzzleLevel(level) {
+        const cfg = Puzzle.levelConfig(level);
+        this._mode = this.MODE_PUZZLE;
+        this._puzzleLevel = cfg.level;
+        this._flowerCount = cfg.flowers;
+        this._colorCount = cfg.colors;
+        this._timerTicks = Math.round(cfg.timeSeconds * 1000 / 30);
+        this._tick = 0;
+        this._init_flower();
+        this._score.init();
+        this._state = this.PLAY_STATE;
+        if (typeof Effects !== 'undefined') Effects.reset();
+    }
+
+    levelSelectPrev() {
+        if (this._state !== this.LEVEL_SELECT_STATE) return;
+        if (this._puzzleLevel > 1) this._puzzleLevel--;
+    }
+
+    levelSelectNext() {
+        if (this._state !== this.LEVEL_SELECT_STATE) return;
+        if (!this._puzzleProgress) return;
+        if (this._puzzleLevel < this._puzzleProgress.unlocked()) {
+            this._puzzleLevel++;
+        }
+    }
+
+    levelSelectPlay() {
+        if (this._state !== this.LEVEL_SELECT_STATE) return;
+        if (!this._puzzleProgress || this._puzzleProgress.isUnlocked(this._puzzleLevel)) {
+            this.playPuzzleLevel(this._puzzleLevel);
+        }
     }
 
     mode() {
         return this._mode;
     }
 
+    puzzleLevel() {
+        return (this._mode === this.MODE_PUZZLE) ? this._puzzleLevel : 0;
+    }
+
+    puzzleProgress() {
+        return this._puzzleProgress;
+    }
+
+    isLevelSelectState() {
+        return this._state === this.LEVEL_SELECT_STATE;
+    }
+
     timerSeconds() {
-        if (this._mode !== this.MODE_ARCADE) return 0;
-        return Math.max(0, Math.ceil(this._timerTicks * 30 / 1000));
+        if (this._mode === this.MODE_ARCADE) {
+            return Math.max(0, Math.ceil(this._timerTicks * 30 / 1000));
+        }
+        if (this._mode === this.MODE_PUZZLE && this.isPlayState()) {
+            return Math.max(0, Math.ceil(this._timerTicks * 30 / 1000));
+        }
+        return 0;
     }
 
     pause() {
@@ -939,14 +1133,21 @@ class DaisyGame {
             });
         }
 
-        // Arcade countdown: zero ticks -> game over.
-        if (this._mode === this.MODE_ARCADE) {
+        // Arcade / Puzzle countdown: zero ticks -> game over.
+        if (this._mode === this.MODE_ARCADE || this._mode === this.MODE_PUZZLE) {
             this._timerTicks--;
             if (this._timerTicks <= 0) {
                 this._timerTicks = 0;
-                this._state = this.GAME_OVER_STATE;
+                this._enterGameOver();
             }
         }
+    }
+
+    _enterGameOver() {
+        if (this._mode === this.MODE_PUZZLE && this._puzzleProgress && this._puzzleLevel > 0) {
+            this._puzzleProgress.recordResult(this._puzzleLevel, this._score.score());
+        }
+        this._state = this.GAME_OVER_STATE;
     }
 
     resetTick() {
@@ -1011,6 +1212,9 @@ class DaisyGame {
             mode: this._mode,
             tick: this._tick,
             timerTicks: this._timerTicks,
+            puzzleLevel: this._puzzleLevel,
+            flowerCount: this._flowerCount,
+            colorCount: this._colorCount,
             addLeafIndex: this._addLeafIndex,
             addLeafTable: this._addLeafTable.slice(),
             score: this._score.serialize(),
@@ -1022,23 +1226,42 @@ class DaisyGame {
         if (!d || typeof d !== 'object') return false;
         if (d.v !== 1) return false;
         if (typeof d.mode !== 'number') return false;
-        if (!Array.isArray(d.flowers) || d.flowers.length !== 7) return false;
+        if (!Array.isArray(d.flowers) || d.flowers.length < 1 || d.flowers.length > 7) return false;
 
-        // Apply each piece defensively; if any inner restore is shaped wrong
-        // we still want the game to reach a usable PAUSE_STATE rather than
-        // half-applied chaos. So we apply, then enforce invariants.
+        const N = d.flowers.length;
+        const C = (typeof d.colorCount === 'number') ? Math.max(1, Math.min(7, d.colorCount | 0)) : 6;
+
         this._mode = d.mode;
         this._tick = (typeof d.tick === 'number') ? d.tick : 0;
         this._timerTicks = (typeof d.timerTicks === 'number') ? d.timerTicks : 0;
+        this._puzzleLevel = (typeof d.puzzleLevel === 'number') ? d.puzzleLevel : 0;
+        this._flowerCount = (typeof d.flowerCount === 'number') ? d.flowerCount : N;
+        this._colorCount = C;
         this._addLeafIndex = (typeof d.addLeafIndex === 'number') ? d.addLeafIndex : 0;
         if (Array.isArray(d.addLeafTable) && d.addLeafTable.length > 0) {
             this._addLeafTable = d.addLeafTable.slice();
         }
         if (d.score) this._score.restore(d.score);
-        for (let i = 0; i < 7; i++) {
+
+        // Rebuild flower array to match the saved size, then restore each.
+        this._flowerArr = [];
+        for (let i = 0; i < N; i++) {
+            const f = new Flower(i, C);
+            f.set_index(i);
+            this._flowerArr.push(f);
+        }
+        for (let i = 0; i < N; i++) {
             this._flowerArr[i].restore(d.flowers[i]);
             this._flowerArr[i].set_index(i);
         }
+
+        // Rebuild active leafMap subset from FULL_LEAF_MAP.
+        this._leafMap = [];
+        for (let i = 0; i < N; i++) {
+            this._leafMap[i] = this.FULL_LEAF_MAP[i].filter(([a, b]) =>
+                Math.floor(a / 10) < N && Math.floor(b / 10) < N);
+        }
+
         // Always come back paused so the player explicitly resumes.
         this._state = this.PAUSE_STATE;
         return true;
@@ -1110,6 +1333,26 @@ class GameEngine{
     }
     this._scoreDB.clearResume();
     this._game.init();
+  }
+
+  retryPuzzleLevel() {
+    const lvl = this._game.puzzleLevel();
+    if (lvl > 0) {
+      this._scoreDB.clearResume();
+      this._game.playPuzzleLevel(lvl);
+    }
+  }
+
+  nextPuzzleLevel() {
+    const lvl = this._game.puzzleLevel();
+    if (lvl > 0 && lvl < Puzzle.MAX_LEVEL) {
+      const prog = this._game.puzzleProgress();
+      const target = lvl + 1;
+      if (!prog || prog.isUnlocked(target)) {
+        this._scoreDB.clearResume();
+        this._game.playPuzzleLevel(target);
+      }
+    }
   }
 }
 
@@ -1216,6 +1459,10 @@ class DrawEngine {
             this._drawModeButtons();
             this._drawHighScore();
         }
+        else if (this.game.isLevelSelectState()) {
+            this._drawWordmark("Puzzle");
+            this._drawLevelSelectPanel();
+        }
         else if (this.game.isPauseState()) {
             this._drawWordmark("Paused");
             this._drawPlayButton(200, 140, 100, 28, "Resume");
@@ -1223,18 +1470,206 @@ class DrawEngine {
             this._drawHighScore();
         }
         else if (this.game.isGameOverState()) {
-            const m = this.game.mode();
-            const title = m === 0 ? "Time's Up!" : m === 1 ? "Stuck!" : "Game Over";
-            this._drawWordmark(title);
-            this._drawModeButtons();
-            this._drawHighScore();
-            this._drawHint("Pick a mode to play again", 380);
+            if (this.game.mode() === 1) {
+                this._drawPuzzleGameOver();
+            }
+            else {
+                const m = this.game.mode();
+                const title = m === 0 ? "Time's Up!" : "Game Over";
+                this._drawWordmark(title);
+                this._drawModeButtons();
+                this._drawHighScore();
+                this._drawHint("Pick a mode to play again", 380);
+            }
         }
         else if (this.game.isPlayState()) {
             this._drawIconButton(40, 40, 26, "pause");
             this._drawIconButton(360, 560, 26, this.game.isPlayMusic() ? "music" : "mute");
             this._drawTimer();
+            if (this.game.mode() === 1)
+                this._drawPuzzleHud();
         }
+    }
+    // ---------- Level select panel ----------
+    _drawLevelSelectPanel() {
+        const lvl = this.game.puzzleLevel() || 1;
+        const cfg = Puzzle.levelConfig(lvl);
+        const prog = this.game.puzzleProgress();
+        const best = prog ? prog.bestScore(lvl) : 0;
+        const stars = prog ? prog.stars(lvl) : 0;
+        const unlocked = prog ? prog.unlocked() : 1;
+        // Info panel.
+        bufCtx.save();
+        const px = 50;
+        const py = 110;
+        const pw = 300;
+        const ph = 130;
+        bufCtx.fillStyle = "rgba(255, 247, 230, 0.92)";
+        this._roundRectPath(px, py, pw, ph, 14);
+        bufCtx.fill();
+        bufCtx.lineWidth = 2;
+        bufCtx.strokeStyle = "#a35a1d";
+        bufCtx.stroke();
+        bufCtx.textAlign = "center";
+        bufCtx.textBaseline = "middle";
+        bufCtx.fillStyle = "#3a2a18";
+        bufCtx.font = "bold 30px " + DrawEngine.UI_FONT;
+        bufCtx.fillText("Level " + cfg.level, 200, py + 28);
+        bufCtx.font = "16px " + DrawEngine.UI_FONT;
+        bufCtx.fillText("Target " + cfg.target + "  ·  Time " + cfg.timeSeconds + "s", 200, py + 60);
+        bufCtx.fillText("Flowers " + cfg.flowers + "  ·  Colors " + cfg.colors, 200, py + 80);
+        bufCtx.fillStyle = "#7a3010";
+        bufCtx.font = "bold 16px " + DrawEngine.UI_FONT;
+        bufCtx.fillText("Best  " + best, 200, py + 105);
+        bufCtx.restore();
+        // Stars.
+        this._drawStars(200, 250, stars, 14);
+        // Prev / Next arrows + Play button.
+        const prevEnabled = lvl > 1;
+        const nextEnabled = lvl < Math.min(Puzzle.MAX_LEVEL, unlocked);
+        const playEnabled = !!prog ? prog.isUnlocked(lvl) : true;
+        this._drawArrowButton(70, 305, "<", prevEnabled);
+        this._drawArrowButton(330, 305, ">", nextEnabled);
+        this._drawPlayButton(200, 305, 70, 24, "Play");
+        if (!playEnabled) {
+            // Dim overlay for locked level.
+            bufCtx.save();
+            bufCtx.fillStyle = "rgba(120,120,120,0.55)";
+            this._roundRectPath(130, 281, 140, 48, 18);
+            bufCtx.fill();
+            bufCtx.font = "20px " + DrawEngine.EMOJI_FONT;
+            bufCtx.textAlign = "center";
+            bufCtx.textBaseline = "middle";
+            bufCtx.fillStyle = "#FFF";
+            bufCtx.fillText("\u{1F512}", 200, 305); // 🔒
+            bufCtx.restore();
+        }
+        // Main Menu button at the bottom.
+        this._drawMenuButton(200, 385, 85, 22);
+    }
+    _drawArrowButton(cx, cy, glyph, enabled) {
+        bufCtx.save();
+        bufCtx.fillStyle = enabled ? "rgba(0,0,0,0.18)" : "rgba(0,0,0,0.10)";
+        bufCtx.beginPath();
+        bufCtx.arc(cx + 1.5, cy + 2.5, 24, 0, Math.PI * 2);
+        bufCtx.fill();
+        const grad = bufCtx.createRadialGradient(cx - 6, cy - 8, 4, cx, cy, 24);
+        if (enabled) {
+            grad.addColorStop(0, "#FFFCE4");
+            grad.addColorStop(1, "#F4C56F");
+        }
+        else {
+            grad.addColorStop(0, "#E0E0E0");
+            grad.addColorStop(1, "#9A9A9A");
+        }
+        bufCtx.fillStyle = grad;
+        bufCtx.beginPath();
+        bufCtx.arc(cx, cy, 24, 0, Math.PI * 2);
+        bufCtx.fill();
+        bufCtx.lineWidth = 2;
+        bufCtx.strokeStyle = enabled ? "#a35a1d" : "#666";
+        bufCtx.stroke();
+        bufCtx.font = "bold 24px " + DrawEngine.UI_FONT;
+        bufCtx.textAlign = "center";
+        bufCtx.textBaseline = "middle";
+        bufCtx.fillStyle = enabled ? "#5b2f0a" : "#444";
+        bufCtx.fillText(glyph, cx, cy + 1);
+        bufCtx.restore();
+    }
+    _drawStars(cx, cy, filled, size) {
+        const spacing = size * 2.4;
+        const startX = cx - spacing;
+        bufCtx.save();
+        for (let i = 0; i < 3; i++) {
+            this._drawStar(startX + i * spacing, cy, size, i < filled);
+        }
+        bufCtx.restore();
+    }
+    _drawStar(cx, cy, r, filled) {
+        bufCtx.save();
+        bufCtx.translate(cx, cy);
+        bufCtx.beginPath();
+        for (let i = 0; i < 10; i++) {
+            const angle = (Math.PI * 2 * i) / 10 - Math.PI / 2;
+            const radius = (i % 2 === 0) ? r : r * 0.45;
+            const x = Math.cos(angle) * radius;
+            const y = Math.sin(angle) * radius;
+            if (i === 0)
+                bufCtx.moveTo(x, y);
+            else
+                bufCtx.lineTo(x, y);
+        }
+        bufCtx.closePath();
+        if (filled) {
+            bufCtx.fillStyle = "#FFD23F";
+            bufCtx.fill();
+            bufCtx.lineWidth = 1.5;
+            bufCtx.strokeStyle = "#a87b00";
+            bufCtx.stroke();
+        }
+        else {
+            bufCtx.fillStyle = "rgba(255,255,255,0.25)";
+            bufCtx.fill();
+            bufCtx.lineWidth = 1.5;
+            bufCtx.strokeStyle = "rgba(120,90,30,0.45)";
+            bufCtx.stroke();
+        }
+        bufCtx.restore();
+    }
+    // ---------- Puzzle in-game HUD ----------
+    _drawPuzzleHud() {
+        const lvl = this.game.puzzleLevel();
+        if (lvl <= 0)
+            return;
+        const cfg = Puzzle.levelConfig(lvl);
+        bufCtx.save();
+        bufCtx.font = "bold 14px " + DrawEngine.UI_FONT;
+        bufCtx.textAlign = "left";
+        bufCtx.textBaseline = "middle";
+        bufCtx.fillStyle = "#FFFFFF";
+        bufCtx.lineWidth = 3;
+        bufCtx.strokeStyle = "rgba(0,0,0,0.55)";
+        const text = "Lv " + lvl + "  ·  Target " + cfg.target;
+        bufCtx.strokeText(text, 80, 22);
+        bufCtx.fillText(text, 80, 22);
+        bufCtx.restore();
+    }
+    // ---------- Puzzle game-over screen ----------
+    _drawPuzzleGameOver() {
+        const lvl = this.game.puzzleLevel();
+        const cfg = Puzzle.levelConfig(lvl);
+        const score = this.game.score();
+        const stars = Puzzle.starRating(score, cfg.target);
+        const cleared = score >= cfg.target;
+        const prog = this.game.puzzleProgress();
+        const best = prog ? prog.bestScore(lvl) : score;
+        this._drawWordmark(cleared ? "Cleared!" : "Failed");
+        // Stars.
+        this._drawStars(200, 130, stars, 18);
+        // Score / target / best lines.
+        bufCtx.save();
+        bufCtx.font = "bold 18px " + DrawEngine.UI_FONT;
+        bufCtx.textAlign = "center";
+        bufCtx.textBaseline = "middle";
+        bufCtx.fillStyle = "#FFFFFF";
+        bufCtx.lineWidth = 3;
+        bufCtx.strokeStyle = "rgba(0,0,0,0.55)";
+        const line1 = "Score " + score + "  /  Target " + cfg.target;
+        bufCtx.strokeText(line1, 200, 175);
+        bufCtx.fillText(line1, 200, 175);
+        const line2 = "Best  " + best;
+        bufCtx.strokeText(line2, 200, 200);
+        bufCtx.fillText(line2, 200, 200);
+        bufCtx.restore();
+        // Buttons: Next (if cleared) / Retry / Main Menu.
+        if (cleared && lvl < Puzzle.MAX_LEVEL) {
+            this._drawModeButton(200, 250, 95, 22, "Next Level", "\u23ED\uFE0F", "#A6E0A6", "#3F9E5C"); // ⏭️
+            this._drawModeButton(200, 305, 95, 22, "Retry", "\u{1F501}", "#FFB179", "#E25E2A"); // 🔁
+        }
+        else {
+            this._drawModeButton(200, 280, 95, 22, "Retry", "\u{1F501}", "#FFB179", "#E25E2A");
+        }
+        this._drawMenuButton(200, 380, 85, 22);
     }
     _drawModeButtons() {
         for (const m of DrawEngine.MODE_BUTTONS) {
@@ -1511,10 +1946,27 @@ class DrawEngine {
     // ---------- Hit testing (unchanged) ----------
     getEventCode(x, y) {
         printf("[DrawEngine] getEventCode() ", this.game.state() + " (" + x + ", " + y + ")");
-        if (this.game.isIdleState() || this.game.isGameOverState()) {
+        if (this.game.isIdleState()) {
             const code = this._hitModeButton(x, y);
             if (code !== 0)
                 return code;
+        }
+        else if (this.game.isLevelSelectState()) {
+            const code = this._hitLevelSelect(x, y);
+            if (code !== 0)
+                return code;
+        }
+        else if (this.game.isGameOverState()) {
+            if (this.game.mode() === 1) {
+                const code = this._hitPuzzleGameOver(x, y);
+                if (code !== 0)
+                    return code;
+            }
+            else {
+                const code = this._hitModeButton(x, y);
+                if (code !== 0)
+                    return code;
+            }
         }
         else if (this.game.isPauseState()) {
             // Resume — primary button at (200, 140) ± (100, 28). Hit box is a touch
@@ -1549,6 +2001,71 @@ class DrawEngine {
                 return i + KEY_0;
             }
         }
+        return 0;
+    }
+    _hitLevelSelect(x, y) {
+        // Prev arrow at (70, 305) r=24
+        const px = gStartX + 70 * gScale;
+        const py = 305 * gScale;
+        const r = 24 * gScale;
+        if ((x - px) ** 2 + (y - py) ** 2 <= r ** 2)
+            return NAV_PREV_KEY;
+        // Next arrow at (330, 305) r=24
+        const nx = gStartX + 330 * gScale;
+        if ((x - nx) ** 2 + (y - py) ** 2 <= r ** 2)
+            return NAV_NEXT_KEY;
+        // Play button at (200, 305) halfW=70 halfH=24
+        const pbx1 = gStartX + (200 - 70) * gScale;
+        const pbx2 = gStartX + (200 + 70) * gScale;
+        const pby1 = (305 - 24) * gScale;
+        const pby2 = (305 + 24) * gScale;
+        if (x > pbx1 && x < pbx2 && y > pby1 && y < pby2)
+            return S_KEY;
+        // Main Menu at (200, 385) halfW=85 halfH=22
+        const mbx1 = gStartX + (200 - 85) * gScale;
+        const mbx2 = gStartX + (200 + 85) * gScale;
+        const mby1 = (385 - 22) * gScale;
+        const mby2 = (385 + 22) * gScale;
+        if (x > mbx1 && x < mbx2 && y > mby1 && y < mby2)
+            return MENU_KEY;
+        return 0;
+    }
+    _hitPuzzleGameOver(x, y) {
+        const lvl = this.game.puzzleLevel();
+        const cfg = Puzzle.levelConfig(lvl);
+        const cleared = this.game.score() >= cfg.target;
+        const halfW = 95;
+        const halfH = 22;
+        if (cleared && lvl < Puzzle.MAX_LEVEL) {
+            // Next at (200, 250)
+            let bx1 = gStartX + (200 - halfW) * gScale;
+            let bx2 = gStartX + (200 + halfW) * gScale;
+            let by1 = (250 - halfH) * gScale;
+            let by2 = (250 + halfH) * gScale;
+            if (x > bx1 && x < bx2 && y > by1 && y < by2)
+                return NEXT_LEVEL_KEY;
+            // Retry at (200, 305)
+            by1 = (305 - halfH) * gScale;
+            by2 = (305 + halfH) * gScale;
+            if (x > bx1 && x < bx2 && y > by1 && y < by2)
+                return S_KEY;
+        }
+        else {
+            // Retry at (200, 280)
+            const bx1 = gStartX + (200 - halfW) * gScale;
+            const bx2 = gStartX + (200 + halfW) * gScale;
+            const by1 = (280 - halfH) * gScale;
+            const by2 = (280 + halfH) * gScale;
+            if (x > bx1 && x < bx2 && y > by1 && y < by2)
+                return S_KEY;
+        }
+        // Main Menu at (200, 380) halfW=85 halfH=22
+        const mbx1 = gStartX + (200 - 85) * gScale;
+        const mbx2 = gStartX + (200 + 85) * gScale;
+        const mby1 = (380 - 22) * gScale;
+        const mby2 = (380 + 22) * gScale;
+        if (x > mbx1 && x < mbx2 && y > mby1 && y < mby2)
+            return MENU_KEY;
         return 0;
     }
     _hitModeButton(x, y) {
@@ -1901,7 +2418,7 @@ class DrawEngine {
         bufCtx.closePath();
     }
 }
-// Pastel petal palette indexed by Leaf.color() (1..6). Index 0 = empty.
+// Pastel petal palette indexed by Leaf.color() (1..7). Index 0 = empty.
 DrawEngine.PETAL_COLORS = [
     null,
     { base: "#FFFFFF", light: "#FFFFFF", dark: "#E8E0E8", outline: "rgba(120,90,110,0.35)" },
@@ -1910,6 +2427,7 @@ DrawEngine.PETAL_COLORS = [
     { base: "#87CEEB", light: "#B6E2F2", dark: "#5FA9CC", outline: "rgba(30,80,140,0.35)" },
     { base: "#FFE94D", light: "#FFF6A8", dark: "#E6C200", outline: "rgba(140,100,0,0.35)" },
     { base: "#90EE90", light: "#C2F5C2", dark: "#5FCB5F", outline: "rgba(20,100,40,0.35)" },
+    { base: "#FFA559", light: "#FFC993", dark: "#E07F1F", outline: "rgba(140,60,0,0.35)" },
 ];
 // Body font stacks shared across HUD/title.
 DrawEngine.UI_FONT = '"Trebuchet MS", "Segoe UI", Verdana, sans-serif';
@@ -1947,9 +2465,17 @@ function processKeyEvent(code) {
       break;
     case ENTER_KEY:
     case S_KEY:
-      // Resume from pause; on idle/game-over default to Endless.
+      // Context-sensitive Start/Confirm:
+      //   PAUSE  -> resume
+      //   LEVEL_SELECT -> play the highlighted puzzle level
+      //   GAME_OVER (puzzle) -> retry the same level
+      //   IDLE / other -> default to Endless
       if (daisyGame.isPauseState()) {
         gameEngine.start();
+      } else if (daisyGame.isLevelSelectState()) {
+        daisyGame.levelSelectPlay();
+      } else if (daisyGame.isGameOverState() && daisyGame.mode() === MODE_PUZZLE) {
+        gameEngine.retryPuzzleLevel();
       } else {
         gameEngine.start(MODE_ENDLESS);
       }
@@ -1965,6 +2491,17 @@ function processKeyEvent(code) {
     case 69: // 'E'
     case MODE_ENDLESS_KEY:
       gameEngine.start(MODE_ENDLESS);
+      break;
+    case 37: // ArrowLeft
+    case NAV_PREV_KEY:
+      daisyGame.levelSelectPrev();
+      break;
+    case 39: // ArrowRight
+    case NAV_NEXT_KEY:
+      daisyGame.levelSelectNext();
+      break;
+    case NEXT_LEVEL_KEY:
+      gameEngine.nextPuzzleLevel();
       break;
     case KEY_0:
       gameEngine.press(0);

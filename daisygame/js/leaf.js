@@ -1,6 +1,8 @@
 class Leaf {
-    constructor(radius) {
-        this._colorTable = [1, 2, 3, 4, 5, 6];
+    constructor(radius, colorCount = 6) {
+        const c = Math.max(1, Math.min(7, colorCount | 0));
+        this._colorTable = [];
+        for (let i = 1; i <= c; i++) this._colorTable.push(i);
         this._colorTable.sort(() => Math.random() - 0.5);
         this._colorIdx = 0;
         this._color = this._colorTable[this._colorIdx];

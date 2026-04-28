@@ -34,7 +34,7 @@ class Effects {
   static readonly MAX_PARTICLES = 80;
   static readonly MAX_CALLOUTS = 3;
 
-  // Pastel particle colors keyed by Leaf.color() index 1..6.
+  // Pastel particle colors keyed by Leaf.color() index 1..7.
   private static readonly PARTICLE_COLOR: ReadonlyArray<string> = [
     "#FFFFFF", // 0 unused
     "#FFFFFF", // 1 white
@@ -43,6 +43,7 @@ class Effects {
     "#87CEEB", // 4 sky
     "#FFE94D", // 5 yellow
     "#90EE90", // 6 green
+    "#FFA559", // 7 orange (used at high puzzle levels)
   ];
 
   static colorFor(idx: number): string {

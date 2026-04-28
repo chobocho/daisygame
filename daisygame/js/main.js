@@ -14,9 +14,17 @@ function processKeyEvent(code) {
       break;
     case ENTER_KEY:
     case S_KEY:
-      // Resume from pause; on idle/game-over default to Endless.
+      // Context-sensitive Start/Confirm:
+      //   PAUSE  -> resume
+      //   LEVEL_SELECT -> play the highlighted puzzle level
+      //   GAME_OVER (puzzle) -> retry the same level
+      //   IDLE / other -> default to Endless
       if (daisyGame.isPauseState()) {
         gameEngine.start();
+      } else if (daisyGame.isLevelSelectState()) {
+        daisyGame.levelSelectPlay();
+      } else if (daisyGame.isGameOverState() && daisyGame.mode() === MODE_PUZZLE) {
+        gameEngine.retryPuzzleLevel();
       } else {
         gameEngine.start(MODE_ENDLESS);
       }
@@ -32,6 +40,17 @@ function processKeyEvent(code) {
     case 69: // 'E'
     case MODE_ENDLESS_KEY:
       gameEngine.start(MODE_ENDLESS);
+      break;
+    case 37: // ArrowLeft
+    case NAV_PREV_KEY:
+      daisyGame.levelSelectPrev();
+      break;
+    case 39: // ArrowRight
+    case NAV_NEXT_KEY:
+      daisyGame.levelSelectNext();
+      break;
+    case NEXT_LEVEL_KEY:
+      gameEngine.nextPuzzleLevel();
       break;
     case KEY_0:
       gameEngine.press(0);

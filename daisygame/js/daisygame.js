@@ -4,6 +4,7 @@ class DaisyGame {
         this.PLAY_STATE = 1;
         this.PAUSE_STATE = 2;
         this.GAME_OVER_STATE = 3;
+        this.LEVEL_SELECT_STATE = 4;
 
         this.MODE_ARCADE = 0;
         this.MODE_PUZZLE = 1;
@@ -12,6 +13,10 @@ class DaisyGame {
         // Tick rate is ~30ms, so 90 sec = 3000 ticks.
         this.ARCADE_TICKS = 3000;
         this._timerTicks = 0;
+        this._flowerCount = 7;
+        this._colorCount = 6;
+        this._puzzleLevel = 0;
+        this._puzzleProgress = (typeof PuzzleProgress !== 'undefined') ? new PuzzleProgress() : null;
 
         this._startX = startX;
         this._startY = startY;
@@ -21,7 +26,8 @@ class DaisyGame {
         this._tick = 0;
         this._score = new Score(highscore);
         this._state = this.IDLE_STATE;
-        this._leafMap = [
+        // Static 7-flower hex adjacency. _init_flower(N) filters this down.
+        this.FULL_LEAF_MAP = [
             [[0, 13], [1, 24], [2, 35], [3, 40], [4, 51], [5, 62]],
             [[12, 25], [14, 61], [13, 0]],
             [[23, 30], [24, 1], [25, 12]],
@@ -30,6 +36,7 @@ class DaisyGame {
             [[50, 63], [52, 45], [51, 4]],
             [[62, 5], [61, 14], [63, 50]],
         ];
+        this._leafMap = this.FULL_LEAF_MAP;
         this._flowerArr = [];
         this._pop_audio = new Audio("data:audio/mp3;base64," + pop_sound);
         this._clear_audio = new Audio("data:audio/mp3;base64," + clear_sound);
@@ -40,10 +47,14 @@ class DaisyGame {
     }
 
     _init_flower() {
-        this._flowerArr = [];
+        const N = Math.max(2, Math.min(7, this._flowerCount | 0 || 7));
+        const C = Math.max(1, Math.min(7, this._colorCount | 0 || 6));
+        this._flowerCount = N;
+        this._colorCount = C;
 
-        for (let i = 0; i < 7; i++) {
-            let f = new Flower(i);
+        this._flowerArr = [];
+        for (let i = 0; i < N; i++) {
+            let f = new Flower(i, C);
             f.set_index(i);
             this._flowerArr.push(f);
         }
@@ -51,30 +62,40 @@ class DaisyGame {
         let center_x = 200;
         let center_y = 300;
         let radius = 30;
-
-        // 중앙 꽃 설정
-        this._flowerArr[0].set_pos(center_x, center_y, radius);
-
-        // 나머지 꽃들
-        for (let i = 0; i < 6; i++) {
-            let angle = 60 * i;
+        // Same hex slots as the original 7-flower layout; for N < 7 we just
+        // populate the first N slots (center + first N-1 ring positions).
+        if (N >= 1) this._flowerArr[0].set_pos(center_x, center_y, radius);
+        for (let i = 1; i < N; i++) {
+            let angle = 60 * (i - 1);
             let radians = angle * Math.PI / 180;
             let x = center_x + Math.floor(radius * 3.5 * Math.cos(radians));
             let y = center_y + Math.floor(radius * 3.5 * Math.sin(radians));
-            this._flowerArr[i + 1].set_pos(x, y, radius);
+            this._flowerArr[i].set_pos(x, y, radius);
         }
 
-        // 회전 방향 분배: 7송이 중 최소 2개 시계방향, 최소 2개 반시계방향,
-        // 나머지 3개는 매 게임마다 랜덤. [CW, CW, CCW, CCW, ?, ?, ?]를 셔플.
-        const dirs = [1, 1, -1, -1];
-        for (let i = 0; i < 3; i++) dirs.push(Math.random() < 0.5 ? 1 : -1);
+        // Subset of FULL_LEAF_MAP with both endpoints below N.
+        this._leafMap = [];
+        for (let i = 0; i < N; i++) {
+            this._leafMap[i] = this.FULL_LEAF_MAP[i].filter(([a, b]) =>
+                Math.floor(a / 10) < N && Math.floor(b / 10) < N);
+        }
+
+        // Direction distribution: at least 2 CW + 2 CCW for N >= 4, else random.
+        let dirs;
+        if (N >= 4) {
+            dirs = [1, 1, -1, -1];
+            for (let i = 0; i < N - 4; i++) dirs.push(Math.random() < 0.5 ? 1 : -1);
+        } else {
+            dirs = [];
+            for (let i = 0; i < N; i++) dirs.push(Math.random() < 0.5 ? 1 : -1);
+        }
         dirs.sort(() => Math.random() - 0.5);
-        for (let i = 0; i < 7; i++) {
+        for (let i = 0; i < N; i++) {
             this._flowerArr[i].set_direction(dirs[i]);
         }
 
         // 같은 색상 꽃잎 변경
-        for (let i = 0; i < 7; i++) {
+        for (let i = 0; i < N; i++) {
             for (let leaf of this._leafMap[i]) {
                 let left_flower = Math.floor(leaf[0] / 10);
                 let left_leaf = leaf[0] % 10;
@@ -91,6 +112,12 @@ class DaisyGame {
                 }
             }
         }
+
+        // Rebuild addLeafTable to match active flower count.
+        this._addLeafTable = [];
+        for (let i = 0; i < N; i++) this._addLeafTable.push(i, i);
+        this._addLeafTable.sort(() => Math.random() - 0.5);
+        this._addLeafIndex = 0;
     }
 
     getFlowers() {
@@ -124,7 +151,7 @@ class DaisyGame {
         this.checkCollision(flower);
         if (!this._isPlayable()) {
             if (this._mode === this.MODE_PUZZLE) {
-                this._state = this.GAME_OVER_STATE;
+                this._enterGameOver();
             } else {
                 this._init_flower();
             }
@@ -132,47 +159,36 @@ class DaisyGame {
     }
 
     _isPlayable() {
-        // 꽃잎 색상의 저장소
-        let leaf_color = Array.from({ length: 7 }, () => new Set());
+        const N = this._flowerArr.length;
+        const leaf_color = Array.from({ length: N }, () => new Set());
 
-        // 모든 꽃을 순회
         for (let flower of this._flowerArr) {
-            // 각 꽃에 있는 꽃잎의 개수 확인
             if (flower.leaf_count() < 6) {
-                return true; // 꽃잎이 부족하면 플레이 가능
+                return true;
             }
-            // 꽃잎의 색상을 저장
             for (let leaf of flower.leaf) {
                 leaf_color[flower.index].add(leaf.color());
             }
         }
 
-        // 이웃한 꽃들 간의 색상 비교
-        for (let i = 1; i < 7; i++) {
-            // 중앙 꽃 (index 0)과 나머지 꽃 비교
-            for (let color of leaf_color[i]) {
-                if (leaf_color[0].has(color)) {
-                    return true; // 동일한 색상이 있으면 플레이 가능
+        // Derive flower-pair adjacency from the active leaf map and check
+        // for shared colors. Works for any N because _leafMap is already
+        // filtered to active flowers in _init_flower.
+        const seen = new Set();
+        for (const pairs of this._leafMap) {
+            for (const [a, b] of pairs) {
+                const fa = Math.floor(a / 10);
+                const fb = Math.floor(b / 10);
+                if (fa === fb) continue;
+                const key = fa < fb ? (fa * 10 + fb) : (fb * 10 + fa);
+                if (seen.has(key)) continue;
+                seen.add(key);
+                for (const c of leaf_color[fa]) {
+                    if (leaf_color[fb].has(c)) return true;
                 }
             }
         }
-
-        // 인접한 두 꽃 사이 (i-1, i) 체크
-        for (let i = 2; i < 7; i++) {
-            for (let color of leaf_color[i]) {
-                if (leaf_color[i - 1].has(color)) {
-                    return true; // 동일한 색상이 있으면 플레이 가능
-                }
-            }
-        }
-
-        for (let color of leaf_color[1]) {
-            if (leaf_color[6].has(color)) {
-                return true; // 동일한 색상이 있으면 플레이 가능
-            }
-        }
-
-        return false; // 모든 조건을 통과하지 못하면 플레이 불가
+        return false;
     }
 
 
@@ -275,17 +291,86 @@ class DaisyGame {
         if (mode !== undefined) {
             this._mode = mode;
         }
+
+        // Puzzle mode opens the level-select screen instead of starting play.
+        // The level-select UI then calls playPuzzleLevel(L) to begin a level.
+        if (this._mode === this.MODE_PUZZLE) {
+            if (this._puzzleProgress) {
+                this._puzzleLevel = this._puzzleProgress.unlocked();
+            } else {
+                this._puzzleLevel = 1;
+            }
+            this._state = this.LEVEL_SELECT_STATE;
+            return;
+        }
+
         this._timerTicks = (this._mode === this.MODE_ARCADE) ? this.ARCADE_TICKS : 0;
+        this._flowerCount = 7;
+        this._colorCount = 6;
+        // Reinit flowers for non-puzzle modes so a previous puzzle session
+        // doesn't leave a 2-flower board behind.
+        this._init_flower();
         this._state = this.PLAY_STATE;
+    }
+
+    playPuzzleLevel(level) {
+        const cfg = Puzzle.levelConfig(level);
+        this._mode = this.MODE_PUZZLE;
+        this._puzzleLevel = cfg.level;
+        this._flowerCount = cfg.flowers;
+        this._colorCount = cfg.colors;
+        this._timerTicks = Math.round(cfg.timeSeconds * 1000 / 30);
+        this._tick = 0;
+        this._init_flower();
+        this._score.init();
+        this._state = this.PLAY_STATE;
+        if (typeof Effects !== 'undefined') Effects.reset();
+    }
+
+    levelSelectPrev() {
+        if (this._state !== this.LEVEL_SELECT_STATE) return;
+        if (this._puzzleLevel > 1) this._puzzleLevel--;
+    }
+
+    levelSelectNext() {
+        if (this._state !== this.LEVEL_SELECT_STATE) return;
+        if (!this._puzzleProgress) return;
+        if (this._puzzleLevel < this._puzzleProgress.unlocked()) {
+            this._puzzleLevel++;
+        }
+    }
+
+    levelSelectPlay() {
+        if (this._state !== this.LEVEL_SELECT_STATE) return;
+        if (!this._puzzleProgress || this._puzzleProgress.isUnlocked(this._puzzleLevel)) {
+            this.playPuzzleLevel(this._puzzleLevel);
+        }
     }
 
     mode() {
         return this._mode;
     }
 
+    puzzleLevel() {
+        return (this._mode === this.MODE_PUZZLE) ? this._puzzleLevel : 0;
+    }
+
+    puzzleProgress() {
+        return this._puzzleProgress;
+    }
+
+    isLevelSelectState() {
+        return this._state === this.LEVEL_SELECT_STATE;
+    }
+
     timerSeconds() {
-        if (this._mode !== this.MODE_ARCADE) return 0;
-        return Math.max(0, Math.ceil(this._timerTicks * 30 / 1000));
+        if (this._mode === this.MODE_ARCADE) {
+            return Math.max(0, Math.ceil(this._timerTicks * 30 / 1000));
+        }
+        if (this._mode === this.MODE_PUZZLE && this.isPlayState()) {
+            return Math.max(0, Math.ceil(this._timerTicks * 30 / 1000));
+        }
+        return 0;
     }
 
     pause() {
@@ -351,14 +436,21 @@ class DaisyGame {
             });
         }
 
-        // Arcade countdown: zero ticks -> game over.
-        if (this._mode === this.MODE_ARCADE) {
+        // Arcade / Puzzle countdown: zero ticks -> game over.
+        if (this._mode === this.MODE_ARCADE || this._mode === this.MODE_PUZZLE) {
             this._timerTicks--;
             if (this._timerTicks <= 0) {
                 this._timerTicks = 0;
-                this._state = this.GAME_OVER_STATE;
+                this._enterGameOver();
             }
         }
+    }
+
+    _enterGameOver() {
+        if (this._mode === this.MODE_PUZZLE && this._puzzleProgress && this._puzzleLevel > 0) {
+            this._puzzleProgress.recordResult(this._puzzleLevel, this._score.score());
+        }
+        this._state = this.GAME_OVER_STATE;
     }
 
     resetTick() {
@@ -423,6 +515,9 @@ class DaisyGame {
             mode: this._mode,
             tick: this._tick,
             timerTicks: this._timerTicks,
+            puzzleLevel: this._puzzleLevel,
+            flowerCount: this._flowerCount,
+            colorCount: this._colorCount,
             addLeafIndex: this._addLeafIndex,
             addLeafTable: this._addLeafTable.slice(),
             score: this._score.serialize(),
@@ -434,23 +529,42 @@ class DaisyGame {
         if (!d || typeof d !== 'object') return false;
         if (d.v !== 1) return false;
         if (typeof d.mode !== 'number') return false;
-        if (!Array.isArray(d.flowers) || d.flowers.length !== 7) return false;
+        if (!Array.isArray(d.flowers) || d.flowers.length < 1 || d.flowers.length > 7) return false;
 
-        // Apply each piece defensively; if any inner restore is shaped wrong
-        // we still want the game to reach a usable PAUSE_STATE rather than
-        // half-applied chaos. So we apply, then enforce invariants.
+        const N = d.flowers.length;
+        const C = (typeof d.colorCount === 'number') ? Math.max(1, Math.min(7, d.colorCount | 0)) : 6;
+
         this._mode = d.mode;
         this._tick = (typeof d.tick === 'number') ? d.tick : 0;
         this._timerTicks = (typeof d.timerTicks === 'number') ? d.timerTicks : 0;
+        this._puzzleLevel = (typeof d.puzzleLevel === 'number') ? d.puzzleLevel : 0;
+        this._flowerCount = (typeof d.flowerCount === 'number') ? d.flowerCount : N;
+        this._colorCount = C;
         this._addLeafIndex = (typeof d.addLeafIndex === 'number') ? d.addLeafIndex : 0;
         if (Array.isArray(d.addLeafTable) && d.addLeafTable.length > 0) {
             this._addLeafTable = d.addLeafTable.slice();
         }
         if (d.score) this._score.restore(d.score);
-        for (let i = 0; i < 7; i++) {
+
+        // Rebuild flower array to match the saved size, then restore each.
+        this._flowerArr = [];
+        for (let i = 0; i < N; i++) {
+            const f = new Flower(i, C);
+            f.set_index(i);
+            this._flowerArr.push(f);
+        }
+        for (let i = 0; i < N; i++) {
             this._flowerArr[i].restore(d.flowers[i]);
             this._flowerArr[i].set_index(i);
         }
+
+        // Rebuild active leafMap subset from FULL_LEAF_MAP.
+        this._leafMap = [];
+        for (let i = 0; i < N; i++) {
+            this._leafMap[i] = this.FULL_LEAF_MAP[i].filter(([a, b]) =>
+                Math.floor(a / 10) < N && Math.floor(b / 10) < N);
+        }
+
         // Always come back paused so the player explicitly resumes.
         this._state = this.PAUSE_STATE;
         return true;

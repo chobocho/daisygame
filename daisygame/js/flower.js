@@ -1,5 +1,5 @@
 class Flower {
-    constructor(index) {
+    constructor(index, colorCount = 6) {
         this.color = "rgb(255,165,0)"; // 주황색
         this.radius = 0;
         this.x = 0;
@@ -8,6 +8,7 @@ class Flower {
         this.leaf = [];
         this.index = index;
         this._small_radius = 10;
+        this._color_count = colorCount;
         // Rotation direction applied by turn(). 1 = clockwise (visually
         // unshift(pop())), -1 = counter-clockwise (push(shift())).
         // Crazy Daisy mixes both flower types on the board.
@@ -26,7 +27,7 @@ class Flower {
     init_leaf() {
         this.leaf = [];
         for (let i = 0; i < 6; i++) {
-            this.leaf.push(new Leaf(this._small_radius));
+            this.leaf.push(new Leaf(this._small_radius, this._color_count));
             this._leaf_count++;
         }
     }

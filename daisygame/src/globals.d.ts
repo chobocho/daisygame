@@ -21,6 +21,9 @@ declare const MODE_ARCADE_KEY: number;
 declare const MODE_PUZZLE_KEY: number;
 declare const MODE_ENDLESS_KEY: number;
 declare const MENU_KEY: number;
+declare const NAV_PREV_KEY: number;
+declare const NAV_NEXT_KEY: number;
+declare const NEXT_LEVEL_KEY: number;
 
 declare let gStartX: number;
 declare let gBlockSize: number;
@@ -52,6 +55,13 @@ interface FlowerLike {
   direction(): number;
 }
 
+interface PuzzleProgressLike {
+  unlocked(): number;
+  isUnlocked(level: number): boolean;
+  bestScore(level: number): number;
+  stars(level: number): number;
+}
+
 interface DaisyGameLike {
   state(): number;
   score(): number;
@@ -60,10 +70,25 @@ interface DaisyGameLike {
   isPlayState(): boolean;
   isPauseState(): boolean;
   isGameOverState(): boolean;
+  isLevelSelectState(): boolean;
   isPlayMusic(): boolean;
   getFlowers(): FlowerLike[];
   mode(): number;
   timerSeconds(): number;
+  puzzleLevel(): number;
+  puzzleProgress(): PuzzleProgressLike | null;
+}
+
+declare class Puzzle {
+  static MAX_LEVEL: number;
+  static levelConfig(level: number): {
+    level: number;
+    flowers: number;
+    colors: number;
+    timeSeconds: number;
+    target: number;
+  };
+  static starRating(score: number, target: number): number;
 }
 
 interface LoadedImages {
