@@ -147,6 +147,13 @@
     │   ├── globals.d.ts
     │   ├── effects.ts
     │   └── draw_engine.ts
+    ├── tests/                # node:test 단위 테스트 (44건)
+    │   ├── _bootstrap.js
+    │   ├── score.test.js
+    │   ├── leaf.test.js
+    │   ├── flower.test.js
+    │   ├── effects.test.js
+    │   └── daisygame.test.js
     └── js/                   # tsc 산출물 + 아직 JS인 파일들
         ├── audio.js
         ├── daisygame.js
@@ -162,7 +169,53 @@
         └── values.js
 ```
 
-## 10. 후속 후보
+## 10. 사용자 피드백 반영
+
+세션 후반부 시각 / 입력 다듬기.
+
+### 10.1 꽃 중심 점 → 시계방향 회전 화살표
+
+- `_drawDaisyCenter`의 freckle 14개 점 텍스처가 어색하다는 피드백 → freckle 코드 + LCG 시드 모두 제거
+- 새 `_drawRotationArrow(cx, cy, r)` 추가 — `Flower.turn()`이 `unshift(pop())`이라 잎이 시계방향으로 한 칸 이동하는 것을 시각화
+- 흰 후광 stroke + 어두운 갈색(`#5b2f0a`) 본체로 노란 디스크 위 가독성 확보
+
+### 10.2 화살표 크기 축소 (180° 반원)
+
+- 처음엔 ~300° 호로 그렸지만 디스크를 가득 채워 시각적으로 무거움 → **180° 반원**으로 축소
+- 위치: 9시 → 12시 → 3시 (윗쪽 반원), 화살촉이 3시 끝에서 시계방향으로 살짝 내려감
+- 본체 굵기·화살촉 크기·흰 후광 굵기를 모두 축소
+
+### 10.3 터치 더블파이어 수정 (60° 회전 보장)
+
+- 한 번 탭에 60° 대신 **120° 회전**한다는 보고
+- 원인: 터치 가능한 비-모바일 환경(데스크톱 터치스크린, Chrome DevTools 터치 에뮬레이션)에서 `touchend` + 합성 `mouseup`이 둘 다 발화 → `turnFlower`가 두 번 호출
+- 수정 (`daisygame/js/main.js`):
+  - `touchListener`에서 `touchstart` / `touchend` / `touchmove`에 `event.preventDefault()` 추가
+  - `addEventListener` 옵션을 `false` → `{ passive: false }`로 변경 (passive 리스너에서는 `preventDefault`가 무시됨)
+  - MDN 명세상 첫 `touchstart`에서 `preventDefault`를 호출해야 후속 합성 마우스 이벤트가 억제됨
+- 부수 효과: 음악 토글 버튼이 두 번 토글되어 결과가 안 바뀌던 현상도 해소
+
+### 10.4 음악 / 뮤트: 캔버스 도형 → 이모지 글리프 (외곽 디스크 제거)
+
+- 캔버스 path로 그린 스피커·음표 도형이 어색하다는 피드백 → **🔊 / 🔇** 이모지로 교체 (`EMOJI_FONT` 폴백 체인 도입)
+- 후속 피드백으로 **둥근 버튼 배경(드롭섀도 + 그라데이션 + 외곽선)도 제거** → 글리프 단독 + 부드러운 검정 드롭섀도(`shadowBlur 6`, `shadowOffsetY 2`)만으로 풀밭 위 가독성 유지
+- pause(좌상단)는 그대로 — 호박색 둥근 버튼 + 두 막대
+- 히트박스(60×60) 좌표 변경 없음 → 입력 동작 영향 없음
+
+## 11. 테스트 보완
+
+추가된 케이스 (`daisygame/tests/`):
+
+- `effects.test.js` (+2)
+  - `tick`이 popup을 위로 이동(y 감소)
+  - `tick`이 callout life를 감쇠 + 만료 시 큐에서 제거
+- `daisygame.test.js` (+2)
+  - `init()` 호출 시 Effects 큐(`popups` / `callouts` / `particles`)가 모두 비워짐
+  - 강제 색 매치(`Leaf._color` / `_life` private 필드 직접 조작) 후 `turnFlower`가 점수를 올림 — `_leafMap[0]`의 `[0, 13]` 페어를 활용한 결정론적 매치
+
+총 테스트 수: 40 → **44건**. 의존성 0의 Node 빌트인 `node:test` 그대로.
+
+## 12. 후속 후보
 
 - 남은 JS 파일들도 점진적으로 .ts로 이식 (현재는 ambient 선언으로 우회 중)
 - `flower.js` / `leaf.js` 인덱스 0–6 / 1–6 매핑을 자료구조로 분리해 가독성 정리

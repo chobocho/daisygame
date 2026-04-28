@@ -94,14 +94,20 @@ function mouseListener(event) {
 function touchListener(event) {
   switch (event.type) {
     case "touchstart":
+      // Suppresses the synthetic mousedown/mouseup the browser would otherwise
+      // emit after the touch sequence — without this, touch-capable desktops
+      // (or DevTools touch emulation) get a double tap that rotates 120°.
+      event.preventDefault();
       break;
     case "touchend":
+      event.preventDefault();
       let pos = getTouchPosition(event);
       processTouchEvent(pos.x, pos.y);
       break;
     case "touchcancel":
       break;
     case "touchmove":
+      event.preventDefault();
       break;
   }
 }
@@ -123,10 +129,10 @@ function InitValue() {
   canvas.addEventListener("mouseout", mouseListener);
   canvas.addEventListener("mouseup", mouseListener);
 
-  canvas.addEventListener("touchstart", touchListener, false);
-  canvas.addEventListener("touchend", touchListener, false);
-  canvas.addEventListener("touchcancel", touchListener, false);
-  canvas.addEventListener("touchmove", touchListener, false);
+  canvas.addEventListener("touchstart", touchListener, { passive: false });
+  canvas.addEventListener("touchend", touchListener, { passive: false });
+  canvas.addEventListener("touchcancel", touchListener, { passive: false });
+  canvas.addEventListener("touchmove", touchListener, { passive: false });
 
   window.addEventListener('resize', resizeCanvas, false);
 }

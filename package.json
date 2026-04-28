@@ -5,7 +5,8 @@
   "description": "Crazy Daisy clone — TypeScript build pipeline.",
   "scripts": {
     "build": "tsc -p daisygame/tsconfig.json",
-    "watch": "tsc -p daisygame/tsconfig.json --watch"
+    "watch": "tsc -p daisygame/tsconfig.json --watch",
+    "test": "npm run build --silent && node --test 'daisygame/tests/*.test.js'"
   },
   "devDependencies": {
     "typescript": "^5.6.3"

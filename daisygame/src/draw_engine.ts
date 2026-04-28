@@ -43,6 +43,8 @@ class DrawEngine {
   // Body font stacks shared across HUD/title.
   private static readonly UI_FONT = '"Trebuchet MS", "Segoe UI", Verdana, sans-serif';
   private static readonly TITLE_FONT = '"Brush Script MT", "Lucida Handwriting", "Comic Sans MS", cursive';
+  private static readonly EMOJI_FONT =
+    '"Apple Color Emoji","Segoe UI Emoji","Noto Color Emoji","EmojiOne Color","Twemoji Mozilla",sans-serif';
 
   constructor(game: DaisyGameLike, images: ImageLoaderLike) {
     this.game = game;
@@ -201,58 +203,45 @@ class DrawEngine {
     bufCtx.restore();
   }
 
-  // Painted circular icon button used for pause/music/mute (#10).
+  // Pause uses the painted button (#10). Music/mute drop the disc and render
+  // the emoji glyph alone — the circular frame felt heavy for the corner icon.
   // Hit box stays at the original 60x60 region centered on (cx, cy).
   private _drawIconButton(cx: number, cy: number, radius: number, kind: "pause" | "music" | "mute"): void {
     bufCtx.save();
-    bufCtx.fillStyle = "rgba(0,0,0,0.18)";
-    bufCtx.beginPath();
-    bufCtx.arc(cx + 1.5, cy + 2.5, radius, 0, Math.PI * 2);
-    bufCtx.fill();
 
-    const grad = bufCtx.createRadialGradient(cx - 6, cy - 8, 4, cx, cy, radius);
-    grad.addColorStop(0, "#FFFCE4");
-    grad.addColorStop(1, "#F4C56F");
-    bufCtx.fillStyle = grad;
-    bufCtx.beginPath();
-    bufCtx.arc(cx, cy, radius, 0, Math.PI * 2);
-    bufCtx.fill();
-    bufCtx.lineWidth = 2;
-    bufCtx.strokeStyle = "#a35a1d";
-    bufCtx.stroke();
-
-    bufCtx.fillStyle = "#5b2f0a";
-    bufCtx.lineWidth = 3;
-    bufCtx.strokeStyle = "#5b2f0a";
     if (kind === "pause") {
+      // Drop shadow disc.
+      bufCtx.fillStyle = "rgba(0,0,0,0.18)";
+      bufCtx.beginPath();
+      bufCtx.arc(cx + 1.5, cy + 2.5, radius, 0, Math.PI * 2);
+      bufCtx.fill();
+
+      // Body.
+      const grad = bufCtx.createRadialGradient(cx - 6, cy - 8, 4, cx, cy, radius);
+      grad.addColorStop(0, "#FFFCE4");
+      grad.addColorStop(1, "#F4C56F");
+      bufCtx.fillStyle = grad;
+      bufCtx.beginPath();
+      bufCtx.arc(cx, cy, radius, 0, Math.PI * 2);
+      bufCtx.fill();
+      bufCtx.lineWidth = 2;
+      bufCtx.strokeStyle = "#a35a1d";
+      bufCtx.stroke();
+
+      // Pause bars.
+      bufCtx.fillStyle = "#5b2f0a";
       bufCtx.fillRect(cx - 9, cy - 10, 6, 20);
       bufCtx.fillRect(cx + 3, cy - 10, 6, 20);
-    } else if (kind === "music") {
-      // Note head + stem.
-      bufCtx.beginPath();
-      bufCtx.ellipse(cx - 4, cy + 7, 5, 4, -0.3, 0, Math.PI * 2);
-      bufCtx.fill();
-      bufCtx.beginPath();
-      bufCtx.moveTo(cx + 1, cy + 6);
-      bufCtx.lineTo(cx + 1, cy - 11);
-      bufCtx.lineTo(cx + 10, cy - 8);
-      bufCtx.stroke();
     } else {
-      // Speaker + slash for mute.
-      bufCtx.beginPath();
-      bufCtx.moveTo(cx - 9, cy - 4);
-      bufCtx.lineTo(cx - 3, cy - 4);
-      bufCtx.lineTo(cx + 4, cy - 10);
-      bufCtx.lineTo(cx + 4, cy + 10);
-      bufCtx.lineTo(cx - 3, cy + 4);
-      bufCtx.lineTo(cx - 9, cy + 4);
-      bufCtx.closePath();
-      bufCtx.fill();
-      bufCtx.lineWidth = 2.5;
-      bufCtx.beginPath();
-      bufCtx.moveTo(cx + 8, cy - 7);
-      bufCtx.lineTo(cx + 14, cy + 7);
-      bufCtx.stroke();
+      const glyph = kind === "music" ? "\u{1F50A}" : "\u{1F507}"; // 🔊 / 🔇
+      bufCtx.font = Math.round(radius * 1.8) + "px " + DrawEngine.EMOJI_FONT;
+      bufCtx.textAlign = "center";
+      bufCtx.textBaseline = "middle";
+      bufCtx.shadowColor = "rgba(0,0,0,0.45)";
+      bufCtx.shadowBlur = 6;
+      bufCtx.shadowOffsetY = 2;
+      bufCtx.fillStyle = "#000";
+      bufCtx.fillText(glyph, cx, cy + 1);
     }
 
     bufCtx.restore();
@@ -507,7 +496,7 @@ class DrawEngine {
     bufCtx.restore();
   }
 
-  // Painted daisy center — yellow/orange radial gradient + freckle texture (#2).
+  // Painted daisy center — yellow/orange radial gradient + clockwise rotation arrow.
   private _drawDaisyCenter(cx: number, cy: number, r: number): void {
     bufCtx.save();
     // White cushion ring behind the disc to lift it off the petals.
@@ -530,29 +519,68 @@ class DrawEngine {
     bufCtx.strokeStyle = "rgba(120,70,0,0.55)";
     bufCtx.stroke();
 
-    // Freckle texture (deterministic per center using a tiny LCG).
-    let seed = (Math.floor(cx) * 73856093) ^ (Math.floor(cy) * 19349663);
-    const next = () => {
-      seed = (seed * 1664525 + 1013904223) | 0;
-      return ((seed >>> 0) % 10000) / 10000;
-    };
-    bufCtx.fillStyle = "rgba(140,80,10,0.55)";
-    const freckles = 14;
-    for (let i = 0; i < freckles; i++) {
-      const a = next() * Math.PI * 2;
-      const rr = next() * r * 0.7;
-      const fx = cx + Math.cos(a) * rr;
-      const fy = cy + Math.sin(a) * rr;
-      const sz = 0.7 + next() * 0.9;
-      bufCtx.beginPath();
-      bufCtx.arc(fx, fy, sz, 0, Math.PI * 2);
-      bufCtx.fill();
-    }
-
     // Sheen.
     bufCtx.fillStyle = "rgba(255,255,255,0.45)";
     bufCtx.beginPath();
     bufCtx.ellipse(cx - r * 0.35, cy - r * 0.4, r * 0.3, r * 0.18, -0.4, 0, Math.PI * 2);
+    bufCtx.fill();
+    bufCtx.restore();
+
+    // Clockwise rotation arrow showing how the petals will move on tap.
+    // Flower.turn() does unshift(pop()), shifting each leaf one slot CW on screen.
+    this._drawRotationArrow(cx, cy, r);
+  }
+
+  // CW rotation indicator drawn inside the daisy center disc.
+  // ~180° arc across the top half (9 o'clock → 12 → 3), with the arrow tip
+  // descending past 3 o'clock to show the CW direction.
+  private _drawRotationArrow(cx: number, cy: number, discRadius: number): void {
+    bufCtx.save();
+    bufCtx.translate(cx, cy);
+
+    const r = discRadius * 0.5;
+    const startAng = Math.PI;       // 180° canvas = 9 o'clock
+    const endAng = 0;                // 0° canvas   = 3 o'clock
+    const headSize = discRadius * 0.32;
+
+    const tipAng = endAng + 0.5;
+    const tipX = Math.cos(tipAng) * r;
+    const tipY = Math.sin(tipAng) * r;
+    const baseInX = Math.cos(endAng) * (r - headSize / 2);
+    const baseInY = Math.sin(endAng) * (r - headSize / 2);
+    const baseOutX = Math.cos(endAng) * (r + headSize / 2);
+    const baseOutY = Math.sin(endAng) * (r + headSize / 2);
+
+    bufCtx.lineCap = "round";
+    bufCtx.lineJoin = "round";
+
+    // White halo for contrast over the yellow disc.
+    bufCtx.strokeStyle = "rgba(255,255,255,0.9)";
+    bufCtx.fillStyle = "rgba(255,255,255,0.9)";
+    bufCtx.lineWidth = Math.max(2.6, discRadius * 0.18);
+    bufCtx.beginPath();
+    bufCtx.arc(0, 0, r, startAng, endAng, false);
+    bufCtx.stroke();
+    bufCtx.beginPath();
+    bufCtx.moveTo(tipX, tipY);
+    bufCtx.lineTo(baseInX, baseInY);
+    bufCtx.lineTo(baseOutX, baseOutY);
+    bufCtx.closePath();
+    bufCtx.stroke();
+    bufCtx.fill();
+
+    // Dark arrow on top.
+    bufCtx.strokeStyle = "#5b2f0a";
+    bufCtx.fillStyle = "#5b2f0a";
+    bufCtx.lineWidth = Math.max(1.4, discRadius * 0.09);
+    bufCtx.beginPath();
+    bufCtx.arc(0, 0, r, startAng, endAng, false);
+    bufCtx.stroke();
+    bufCtx.beginPath();
+    bufCtx.moveTo(tipX, tipY);
+    bufCtx.lineTo(baseInX, baseInY);
+    bufCtx.lineTo(baseOutX, baseOutY);
+    bufCtx.closePath();
     bufCtx.fill();
 
     bufCtx.restore();
