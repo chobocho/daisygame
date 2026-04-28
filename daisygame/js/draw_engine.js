@@ -44,6 +44,10 @@ class DrawEngine {
     // ---------- Background (#8) ----------
     _drawBackground() {
         bufCtx.drawImage(this.background[this.background_image], 0, 0, gScreenX, gScreenY);
+        // The level-select grid has 100 small cells; cloud + grass overlays just
+        // add visual noise behind them.
+        if (this.game.isLevelSelectState())
+            return;
         this._drawClouds();
         this._drawGrass();
     }
@@ -140,8 +144,18 @@ class DrawEngine {
         }
     }
     _drawLevelSelectPanel() {
+        // Cream backdrop behind the grid — gives every cell the same neutral
+        // base, so locked / unstarred cells don't pick up the green garden
+        // background and read fuzzy.
+        bufCtx.save();
+        bufCtx.fillStyle = "rgba(255, 247, 230, 0.95)";
+        this._roundRectPath(12, 92, 376, 416, 14);
+        bufCtx.fill();
+        bufCtx.lineWidth = 2;
+        bufCtx.strokeStyle = "rgba(140, 90, 30, 0.6)";
+        bufCtx.stroke();
+        bufCtx.restore();
         this._drawLevelGrid();
-        // Main Menu sits below the grid.
         this._drawMenuButton(200, 540, 85, 22);
     }
     _drawLevelGrid() {
@@ -163,9 +177,9 @@ class DrawEngine {
         const stars = prog ? prog.stars(level) : 0;
         const best = prog ? prog.bestScore(level) : 0;
         bufCtx.save();
-        // Background tinted by progress.
+        // Opaque tint so the cell reads cleanly on top of the cream panel.
         if (!isUnlocked) {
-            bufCtx.fillStyle = "rgba(150,150,150,0.55)";
+            bufCtx.fillStyle = "#B8B5AE";
         }
         else if (stars >= 3) {
             bufCtx.fillStyle = "#FFD56B";
@@ -174,7 +188,7 @@ class DrawEngine {
             bufCtx.fillStyle = "#FFEFA8";
         }
         else {
-            bufCtx.fillStyle = "rgba(255,255,255,0.92)";
+            bufCtx.fillStyle = "#FFFFFF";
         }
         this._roundRectPath(cx - w / 2, cy - h / 2, w, h, 5);
         bufCtx.fill();
@@ -198,7 +212,7 @@ class DrawEngine {
             return;
         }
         // Level number on top.
-        bufCtx.font = "bold 11px " + DrawEngine.UI_FONT;
+        bufCtx.font = "bold 12px " + DrawEngine.UI_FONT;
         bufCtx.textAlign = "center";
         bufCtx.textBaseline = "middle";
         bufCtx.fillStyle = "#3a2a18";

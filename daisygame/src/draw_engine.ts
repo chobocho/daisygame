@@ -111,6 +111,9 @@ class DrawEngine {
 
   private _drawBackground(): void {
     bufCtx.drawImage(this.background[this.background_image], 0, 0, gScreenX, gScreenY);
+    // The level-select grid has 100 small cells; cloud + grass overlays just
+    // add visual noise behind them.
+    if (this.game.isLevelSelectState()) return;
     this._drawClouds();
     this._drawGrass();
   }
@@ -216,8 +219,19 @@ class DrawEngine {
   private static readonly GRID_CELL_H = 40;
 
   private _drawLevelSelectPanel(): void {
+    // Cream backdrop behind the grid — gives every cell the same neutral
+    // base, so locked / unstarred cells don't pick up the green garden
+    // background and read fuzzy.
+    bufCtx.save();
+    bufCtx.fillStyle = "rgba(255, 247, 230, 0.95)";
+    this._roundRectPath(12, 92, 376, 416, 14);
+    bufCtx.fill();
+    bufCtx.lineWidth = 2;
+    bufCtx.strokeStyle = "rgba(140, 90, 30, 0.6)";
+    bufCtx.stroke();
+    bufCtx.restore();
+
     this._drawLevelGrid();
-    // Main Menu sits below the grid.
     this._drawMenuButton(200, 540, 85, 22);
   }
 
@@ -251,15 +265,15 @@ class DrawEngine {
 
     bufCtx.save();
 
-    // Background tinted by progress.
+    // Opaque tint so the cell reads cleanly on top of the cream panel.
     if (!isUnlocked) {
-      bufCtx.fillStyle = "rgba(150,150,150,0.55)";
+      bufCtx.fillStyle = "#B8B5AE";
     } else if (stars >= 3) {
       bufCtx.fillStyle = "#FFD56B";
     } else if (stars >= 1) {
       bufCtx.fillStyle = "#FFEFA8";
     } else {
-      bufCtx.fillStyle = "rgba(255,255,255,0.92)";
+      bufCtx.fillStyle = "#FFFFFF";
     }
     this._roundRectPath(cx - w / 2, cy - h / 2, w, h, 5);
     bufCtx.fill();
@@ -285,7 +299,7 @@ class DrawEngine {
     }
 
     // Level number on top.
-    bufCtx.font = "bold 11px " + DrawEngine.UI_FONT;
+    bufCtx.font = "bold 12px " + DrawEngine.UI_FONT;
     bufCtx.textAlign = "center";
     bufCtx.textBaseline = "middle";
     bufCtx.fillStyle = "#3a2a18";
