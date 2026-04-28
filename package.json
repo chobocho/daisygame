@@ -1,0 +1,13 @@
+{
+  "name": "daisygame",
+  "private": true,
+  "version": "0.0.0",
+  "description": "Crazy Daisy clone — TypeScript build pipeline.",
+  "scripts": {
+    "build": "tsc -p daisygame/tsconfig.json",
+    "watch": "tsc -p daisygame/tsconfig.json --watch"
+  },
+  "devDependencies": {
+    "typescript": "^5.6.3"
+  }
+}

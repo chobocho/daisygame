@@ -88,6 +88,7 @@ class DaisyGame {
         this._init_flower();
         this._score.init();
         this._state = this.IDLE_STATE;
+        if (typeof Effects !== 'undefined') Effects.reset();
     }
 
     isPlayMusic() {
@@ -160,6 +161,7 @@ class DaisyGame {
         }
 
         let removedLeaf = 0;
+        const matches = [];
         for (let leaf of this._leafMap[flower]) {
             let left_flower = Math.floor(leaf[0] / 10);
             let left_flower_leaf = leaf[0] % 10;
@@ -169,17 +171,38 @@ class DaisyGame {
             if (this._flowerArr[left_flower].leaf[left_flower_leaf].isAlive() &&
                 this._flowerArr[right_flower].leaf[right_flower_leaf].isAlive() &&
                 this._flowerArr[left_flower].leaf[left_flower_leaf].color() === this._flowerArr[right_flower].leaf[right_flower_leaf].color()) {
+                const colorIdx = this._flowerArr[left_flower].leaf[left_flower_leaf].color();
+                const lp = this._leafScreenPos(left_flower, left_flower_leaf);
+                const rp = this._leafScreenPos(right_flower, right_flower_leaf);
                 this._flowerArr[left_flower].remove(left_flower_leaf);
                 this._flowerArr[right_flower].remove(right_flower_leaf);
                 removedLeaf++;
+                matches.push({ x: (lp.x + rp.x) / 2, y: (lp.y + rp.y) / 2, colorIdx });
             }
         }
 
         const scoreTable = [0, 1, 10, 20, 50, 128, 256, 0, 0, 0, 0, 0, 0, 0];
-        this.increaseScore(scoreTable[removedLeaf]);
+        const gained = scoreTable[removedLeaf];
+        this.increaseScore(gained);
 
         if (removedLeaf === 0) return;
+
+        if (typeof Effects !== 'undefined') {
+            const turnFlower = this._flowerArr[flower];
+            Effects.popScore(turnFlower.x, turnFlower.y - turnFlower.radius - 12, gained);
+            for (const m of matches) {
+                Effects.burst(m.x, m.y, Effects.colorFor(m.colorIdx));
+            }
+        }
+
         this._playEffectSound();
+    }
+
+    _leafScreenPos(flowerIdx, leafIdx) {
+        const f = this._flowerArr[flowerIdx];
+        const radians = (60 * leafIdx) * Math.PI / 180;
+        const dist = f.radius + f.small_radius();
+        return { x: f.x + Math.cos(radians) * dist, y: f.y + Math.sin(radians) * dist };
     }
 
     _playEffectSound() {
@@ -194,6 +217,14 @@ class DaisyGame {
         }
 
         this.increaseScore(scoreTable[count]);
+
+        if (count >= 1 && typeof Effects !== 'undefined') {
+            if (count >= 2) {
+                Effects.callout("Flower Power!", "power");
+            } else {
+                Effects.callout("Daisy Chain!", "chain");
+            }
+        }
 
         if (this.isPlayMusic()) {
             if (needToPlayClearSound) {
