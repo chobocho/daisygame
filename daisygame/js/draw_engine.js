@@ -93,9 +93,9 @@ class DrawEngine {
     _drawButton() {
         if (this.game.isIdleState()) {
             this._drawWordmark("Crazy Daisy");
-            this._drawPlayButton(200, 134, 105, 34);
-            this._drawHint("Tap a daisy to spin its petals");
+            this._drawModeButtons();
             this._drawHighScore();
+            this._drawHint("Pick a mode \u2014 A / Z / E");
         }
         else if (this.game.isPauseState()) {
             this._drawWordmark("Paused");
@@ -104,15 +104,73 @@ class DrawEngine {
             this._drawHighScore();
         }
         else if (this.game.isGameOverState()) {
-            this._drawWordmark("Game Over");
-            this._drawPlayButton(200, 134, 105, 34, "Play");
-            this._drawHint("Try again?");
+            const m = this.game.mode();
+            const title = m === 0 ? "Time's Up!" : m === 1 ? "Stuck!" : "Game Over";
+            this._drawWordmark(title);
+            this._drawModeButtons();
             this._drawHighScore();
+            this._drawHint("Pick a mode to play again");
         }
         else if (this.game.isPlayState()) {
             this._drawIconButton(40, 40, 26, "pause");
             this._drawIconButton(360, 560, 26, this.game.isPlayMusic() ? "music" : "mute");
+            this._drawTimer();
         }
+    }
+    _drawModeButtons() {
+        for (const m of DrawEngine.MODE_BUTTONS) {
+            this._drawModeButton(gScreenX / 2, m.cy, DrawEngine.MODE_BTN_HALF_W, DrawEngine.MODE_BTN_HALF_H, m.label, m.glyph, m.top, m.bot);
+        }
+    }
+    _drawModeButton(cx, cy, halfW, halfH, label, glyph, top, bot) {
+        bufCtx.save();
+        // Drop shadow.
+        bufCtx.fillStyle = "rgba(0,0,0,0.20)";
+        this._roundRectPath(cx - halfW + 2, cy - halfH + 4, halfW * 2, halfH * 2, 14);
+        bufCtx.fill();
+        // Body.
+        const grad = bufCtx.createLinearGradient(0, cy - halfH, 0, cy + halfH);
+        grad.addColorStop(0, top);
+        grad.addColorStop(1, bot);
+        bufCtx.fillStyle = grad;
+        this._roundRectPath(cx - halfW, cy - halfH, halfW * 2, halfH * 2, 14);
+        bufCtx.fill();
+        bufCtx.lineWidth = 2;
+        bufCtx.strokeStyle = "#3a2a18";
+        bufCtx.stroke();
+        // Emoji glyph (left side of button).
+        bufCtx.font = "26px " + DrawEngine.EMOJI_FONT;
+        bufCtx.textAlign = "center";
+        bufCtx.textBaseline = "middle";
+        bufCtx.fillStyle = "#000";
+        bufCtx.fillText(glyph, cx - halfW + 30, cy);
+        // Label.
+        bufCtx.font = "bold 22px " + DrawEngine.UI_FONT;
+        bufCtx.textAlign = "center";
+        bufCtx.lineWidth = 3;
+        bufCtx.strokeStyle = "rgba(0,0,0,0.55)";
+        bufCtx.fillStyle = "#FFFFFF";
+        bufCtx.strokeText(label, cx + 16, cy + 1);
+        bufCtx.fillText(label, cx + 16, cy + 1);
+        bufCtx.restore();
+    }
+    _drawTimer() {
+        if (this.game.mode() !== 0)
+            return;
+        const sec = this.game.timerSeconds();
+        bufCtx.save();
+        bufCtx.font = "bold 28px " + DrawEngine.UI_FONT;
+        bufCtx.textAlign = "center";
+        bufCtx.textBaseline = "middle";
+        bufCtx.lineWidth = 4;
+        bufCtx.strokeStyle = "rgba(0,0,0,0.6)";
+        bufCtx.fillStyle = sec <= 10 ? "#FF5050" : "#FFFFFF";
+        const m = Math.floor(sec / 60);
+        const s = sec % 60;
+        const text = m + ":" + (s < 10 ? "0" + s : "" + s);
+        bufCtx.strokeText(text, gScreenX / 2, 32);
+        bufCtx.fillText(text, gScreenX / 2, 32);
+        bufCtx.restore();
     }
     // Painted rounded-rect "Play / Resume" button with glyph (#10).
     // Hit box (kept to match getEventCode):
@@ -300,27 +358,16 @@ class DrawEngine {
     // ---------- Hit testing (unchanged) ----------
     getEventCode(x, y) {
         printf("[DrawEngine] getEventCode() ", this.game.state() + " (" + x + ", " + y + ")");
-        if (this.game.isIdleState()) {
-            const bx1 = gStartX + 95 * gScale;
-            const bx2 = gStartX + (95 + 210) * gScale;
-            const by1 = 100 * gScale;
-            const by2 = (100 + 163 * 0.7) * gScale;
-            if (x > bx1 && x < bx2 && y > by1 && y < by2)
-                return S_KEY;
+        if (this.game.isIdleState() || this.game.isGameOverState()) {
+            const code = this._hitModeButton(x, y);
+            if (code !== 0)
+                return code;
         }
         else if (this.game.isPauseState()) {
             const bx1 = gStartX + 100 * gScale;
             const bx2 = gStartX + 300 * gScale;
             const by1 = 100 * gScale;
             const by2 = 200 * gScale;
-            if (x > bx1 && x < bx2 && y > by1 && y < by2)
-                return S_KEY;
-        }
-        else if (this.game.isGameOverState()) {
-            const bx1 = gStartX + 95 * gScale;
-            const bx2 = gStartX + (95 + 210) * gScale;
-            const by1 = 100 * gScale;
-            const by2 = (100 + 163 * 0.7) * gScale;
             if (x > bx1 && x < bx2 && y > by1 && y < by2)
                 return S_KEY;
         }
@@ -338,6 +385,25 @@ class DrawEngine {
         for (let i = 0; i < 7; i++) {
             if (flowers[i].is_inside(x, y, gStartX, gScale)) {
                 return i + KEY_0;
+            }
+        }
+        return 0;
+    }
+    _hitModeButton(x, y) {
+        const cx = gScreenX / 2;
+        const halfW = DrawEngine.MODE_BTN_HALF_W;
+        const halfH = DrawEngine.MODE_BTN_HALF_H;
+        for (const m of DrawEngine.MODE_BUTTONS) {
+            const bx1 = gStartX + (cx - halfW) * gScale;
+            const bx2 = gStartX + (cx + halfW) * gScale;
+            const by1 = (m.cy - halfH) * gScale;
+            const by2 = (m.cy + halfH) * gScale;
+            if (x > bx1 && x < bx2 && y > by1 && y < by2) {
+                if (m.mode === 0)
+                    return MODE_ARCADE_KEY;
+                if (m.mode === 1)
+                    return MODE_PUZZLE_KEY;
+                return MODE_ENDLESS_KEY;
             }
         }
         return 0;
@@ -680,3 +746,12 @@ DrawEngine.PETAL_COLORS = [
 DrawEngine.UI_FONT = '"Trebuchet MS", "Segoe UI", Verdana, sans-serif';
 DrawEngine.TITLE_FONT = '"Brush Script MT", "Lucida Handwriting", "Comic Sans MS", cursive';
 DrawEngine.EMOJI_FONT = '"Apple Color Emoji","Segoe UI Emoji","Noto Color Emoji","EmojiOne Color","Twemoji Mozilla",sans-serif';
+// Mode-select buttons drawn on idle / game-over screens.
+// (mode IDs mirror values.js: arcade=0, puzzle=1, endless=2.)
+DrawEngine.MODE_BUTTONS = [
+    { mode: 0, label: "Arcade", glyph: "\u23F1\uFE0F", top: "#FFB179", bot: "#E25E2A", cy: 128 }, // ⏱️
+    { mode: 1, label: "Puzzle", glyph: "\u{1F9E9}", top: "#A6BFF7", bot: "#5C7DD6", cy: 180 }, // 🧩
+    { mode: 2, label: "Endless", glyph: "\u267E\uFE0F", top: "#A6E0A6", bot: "#3F9E5C", cy: 232 }, // ♾️
+];
+DrawEngine.MODE_BTN_HALF_W = 110;
+DrawEngine.MODE_BTN_HALF_H = 24;

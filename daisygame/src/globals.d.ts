@@ -13,6 +13,14 @@ declare const M_KEY: number;
 declare const P_KEY: number;
 declare const S_KEY: number;
 
+declare const MODE_ARCADE: number;
+declare const MODE_PUZZLE: number;
+declare const MODE_ENDLESS: number;
+
+declare const MODE_ARCADE_KEY: number;
+declare const MODE_PUZZLE_KEY: number;
+declare const MODE_ENDLESS_KEY: number;
+
 declare let gStartX: number;
 declare let gBlockSize: number;
 declare let gScale: number;
@@ -52,6 +60,8 @@ interface DaisyGameLike {
   isGameOverState(): boolean;
   isPlayMusic(): boolean;
   getFlowers(): FlowerLike[];
+  mode(): number;
+  timerSeconds(): number;
 }
 
 interface LoadedImages {

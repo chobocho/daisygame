@@ -12,6 +12,17 @@ const M_KEY = 77;
 const P_KEY = 80;
 const S_KEY = 83;
 
+// Mode IDs (must mirror DaisyGame.MODE_*).
+const MODE_ARCADE = 0;
+const MODE_PUZZLE = 1;
+const MODE_ENDLESS = 2;
+
+// Synthetic codes returned by DrawEngine.getEventCode for the mode buttons
+// on the idle / game-over screens. Out of keyboard range to avoid collision.
+const MODE_ARCADE_KEY = 201;
+const MODE_PUZZLE_KEY = 202;
+const MODE_ENDLESS_KEY = 203;
+
 let gStartX = 0;
 let gBlockSize = 60;
 let gScale = 1.0;

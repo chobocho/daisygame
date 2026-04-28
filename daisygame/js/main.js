@@ -14,8 +14,24 @@ function processKeyEvent(code) {
       break;
     case ENTER_KEY:
     case S_KEY:
-      printf("[Main] processKeyEvent: ", "Start");
-      gameEngine.start();
+      // Resume from pause; on idle/game-over default to Endless.
+      if (daisyGame.isPauseState()) {
+        gameEngine.start();
+      } else {
+        gameEngine.start(MODE_ENDLESS);
+      }
+      break;
+    case 65: // 'A'
+    case MODE_ARCADE_KEY:
+      gameEngine.start(MODE_ARCADE);
+      break;
+    case 90: // 'Z' (P is taken by Pause)
+    case MODE_PUZZLE_KEY:
+      gameEngine.start(MODE_PUZZLE);
+      break;
+    case 69: // 'E'
+    case MODE_ENDLESS_KEY:
+      gameEngine.start(MODE_ENDLESS);
       break;
     case KEY_0:
       gameEngine.press(0);

@@ -39,13 +39,15 @@ function loadGame() {
       play() {}
     }
   `;
-  const files = [...CORE_FILES, "daisygame.js"];
+  // values.js declares mode IDs (MODE_ARCADE/PUZZLE/ENDLESS); load it so the
+  // tests can reference the same constants the production code uses.
+  const files = ["util.js", "effects.js", "score.js", "leaf.js", "flower.js", "values.js", "daisygame.js"];
   const body = `
     "use strict";
     const console = { log() {}, warn() {}, error() {} };
     ${stubs}
     ${files.map(read).join("\n\n")}
-    return { Score, Leaf, Flower, Effects, DaisyGame };
+    return { Score, Leaf, Flower, Effects, DaisyGame, MODE_ARCADE, MODE_PUZZLE, MODE_ENDLESS };
   `;
   return new Function(body)();
 }

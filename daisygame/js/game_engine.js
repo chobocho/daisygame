@@ -29,8 +29,8 @@ class GameEngine{
     }
   }
 
-  start() {
-    this._game.start();
+  start(mode) {
+    this._game.start(mode);
   }
 
   press(key) {

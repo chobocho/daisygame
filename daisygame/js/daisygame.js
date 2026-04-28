@@ -5,6 +5,14 @@ class DaisyGame {
         this.PAUSE_STATE = 2;
         this.GAME_OVER_STATE = 3;
 
+        this.MODE_ARCADE = 0;
+        this.MODE_PUZZLE = 1;
+        this.MODE_ENDLESS = 2;
+        this._mode = this.MODE_ENDLESS;
+        // Tick rate is ~30ms, so 90 sec = 3000 ticks.
+        this.ARCADE_TICKS = 3000;
+        this._timerTicks = 0;
+
         this._startX = startX;
         this._startY = startY;
         this._x = startX;
@@ -106,7 +114,11 @@ class DaisyGame {
         this._flowerArr[flower].turn();
         this.checkCollision(flower);
         if (!this._isPlayable()) {
-            this._init_flower();
+            if (this._mode === this.MODE_PUZZLE) {
+                this._state = this.GAME_OVER_STATE;
+            } else {
+                this._init_flower();
+            }
         }
     }
 
@@ -235,18 +247,36 @@ class DaisyGame {
         }
     }
 
-    start() {
-        console.log("[DaisyGame] Start()" + this._state);
+    start(mode) {
+        console.log("[DaisyGame] Start()" + this._state + " mode=" + mode);
         if (this._state === this.PLAY_STATE) {
             return;
         }
 
-        if (this._state === this.PAUSE_STATE || this._state === this.IDLE_STATE) {
+        // Resuming from pause keeps the active mode and remaining timer.
+        if (this._state === this.PAUSE_STATE) {
             this._state = this.PLAY_STATE;
-        } else if (this._state === this.GAME_OVER_STATE) {
-            this.init();
-            this._state = this.PLAY_STATE;
+            return;
         }
+
+        if (this._state === this.GAME_OVER_STATE) {
+            this.init();
+        }
+
+        if (mode !== undefined) {
+            this._mode = mode;
+        }
+        this._timerTicks = (this._mode === this.MODE_ARCADE) ? this.ARCADE_TICKS : 0;
+        this._state = this.PLAY_STATE;
+    }
+
+    mode() {
+        return this._mode;
+    }
+
+    timerSeconds() {
+        if (this._mode !== this.MODE_ARCADE) return 0;
+        return Math.max(0, Math.ceil(this._timerTicks * 30 / 1000));
     }
 
     pause() {
@@ -277,37 +307,49 @@ class DaisyGame {
         this._tick++;
         this._reduceLeaf();
 
-        let leaf_count = 0;
-        this._flowerArr.forEach(f => {
-            if (f.leaf_count() == 0) {
-                for (let i = 0; i < 6; i++) {
-                    f.addLeaf(this._flowerArr);
-                }
-            }
-            leaf_count += f.leaf_count();
-        });
-
-        if (this._tick > 60 || leaf_count < 21) {
-            this._tick = 0;
-            this._addLeaf();
-        }
-
-        this._flowerArr.forEach(f => {
-            if (f.leaf_count() == 6) {
-                let count = 0;
-                for (let i = 1; i < 6; i++) {
-                    count += f.leaf[i].color() === f.leaf[0].color() ? 1 : 0;
-                }
-                if (count == 5) {
-                    for (let i = 1; i < 6; i++) {
-                        f.remove(i);
+        // Puzzle freezes the board: no auto-refill, no cadenced new leaves,
+        // no monochrome bonus (which would also add fresh leaves).
+        if (this._mode !== this.MODE_PUZZLE) {
+            let leaf_count = 0;
+            this._flowerArr.forEach(f => {
+                if (f.leaf_count() == 0) {
+                    for (let i = 0; i < 6; i++) {
                         f.addLeaf(this._flowerArr);
                     }
-                    this.increaseScore(88);
                 }
-            }
-        });
+                leaf_count += f.leaf_count();
+            });
 
+            if (this._tick > 60 || leaf_count < 21) {
+                this._tick = 0;
+                this._addLeaf();
+            }
+
+            this._flowerArr.forEach(f => {
+                if (f.leaf_count() == 6) {
+                    let count = 0;
+                    for (let i = 1; i < 6; i++) {
+                        count += f.leaf[i].color() === f.leaf[0].color() ? 1 : 0;
+                    }
+                    if (count == 5) {
+                        for (let i = 1; i < 6; i++) {
+                            f.remove(i);
+                            f.addLeaf(this._flowerArr);
+                        }
+                        this.increaseScore(88);
+                    }
+                }
+            });
+        }
+
+        // Arcade countdown: zero ticks -> game over.
+        if (this._mode === this.MODE_ARCADE) {
+            this._timerTicks--;
+            if (this._timerTicks <= 0) {
+                this._timerTicks = 0;
+                this._state = this.GAME_OVER_STATE;
+            }
+        }
     }
 
     resetTick() {

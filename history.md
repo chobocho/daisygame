@@ -215,7 +215,61 @@
 
 총 테스트 수: 40 → **44건**. 의존성 0의 Node 빌트인 `node:test` 그대로.
 
-## 12. 후속 후보
+## 12. 3개 게임 모드 도입 (Arcade / Puzzle / Endless)
+
+원작 Astraware Crazy Daisy의 3-mode 구조를 이식. MobyGames 스크린샷과 리뷰 기반으로 각 모드의 규칙 추론.
+
+### 12.1 모드별 동작
+
+| 모드 | 동작 |
+|---|---|
+| **Endless** (기본) | 기존 행동 — 잎 자동 보충, 단색 보너스, `_isPlayable` false 시 `_init_flower()`로 보드 리셋. 게임오버 없음 |
+| **Arcade** | 90초(=3000틱) 카운트다운. 잎 보충 / 보너스는 endless와 동일. 타이머 0 → `GAME_OVER_STATE` |
+| **Puzzle** | 잎 자동 보충 / 단색 보너스 비활성화. `_isPlayable` false 시 보드 리셋 대신 `GAME_OVER_STATE`. 시간 압박 없음 |
+
+### 12.2 데이터/로직 변경
+
+- `daisygame/js/daisygame.js`
+  - `MODE_ARCADE`/`MODE_PUZZLE`/`MODE_ENDLESS` 상수 + `ARCADE_TICKS = 3000`
+  - `_mode` / `_timerTicks` 멤버
+  - `start(mode)` — IDLE/GAME_OVER에서 모드 지정 + 타이머 무장 (PAUSE는 모드/타이머 보존하며 resume)
+  - `mode()` / `timerSeconds()` 게터
+  - `turnFlower`의 `_isPlayable` false 분기에서 puzzle은 `GAME_OVER_STATE`, 그 외는 기존 보드 리셋
+  - `increaseTick`에서 puzzle 모드는 잎 보충 / 단색 보너스 블록 통째 스킵, arcade 모드는 마지막에 `_timerTicks--` + 0 도달 시 GAME_OVER
+- `daisygame/js/values.js` — `MODE_*` ID + `MODE_*_KEY` 합성 코드(201–203, 키보드 범위 밖)
+- `daisygame/js/game_engine.js` — `start(mode)`로 인자 전달
+- `daisygame/js/main.js` — `processKeyEvent`에서 A/Z/E 키와 `MODE_*_KEY`를 모두 매핑. ENTER/S 키는 PAUSE면 resume, 그 외엔 endless 기본
+- `daisygame/src/globals.d.ts` — 모드 상수, `mode()` / `timerSeconds()` 선언
+
+### 12.3 UI 변경 (`draw_engine.ts`)
+
+- IDLE / GAME_OVER 화면: 단일 Play 버튼 → **3개 모드 버튼**
+  - Arcade: ⏱️ + 주황 그라데이션 (`#FFB179` → `#E25E2A`)
+  - Puzzle: 🧩 + 파랑 그라데이션 (`#A6BFF7` → `#5C7DD6`)
+  - Endless: ♾️ + 녹색 그라데이션 (`#A6E0A6` → `#3F9E5C`)
+  - 가운데 cy = 128 / 180 / 232, halfW=110, halfH=24
+- GAME_OVER 워드마크가 모드별 — `Time's Up!` (arcade) / `Stuck!` (puzzle) / `Game Over` (기타)
+- PLAY 상태 상단 중앙에 `m:ss` 타이머 (arcade 한정, 잔여 ≤ 10초 빨강)
+- `_hitModeButton(x, y)` 헬퍼 — IDLE/GAME_OVER 클릭이 `MODE_*_KEY` 합성 코드로 라우팅
+- PAUSE 화면은 그대로 (단일 Resume 버튼)
+
+### 12.4 테스트 보완 (54건, +10)
+
+`daisygame/tests/_bootstrap.js`의 `loadGame()`이 이제 `values.js`도 같이 평가 → `MODE_ARCADE`/`MODE_PUZZLE`/`MODE_ENDLESS` 상수를 테스트로 노출.
+
+추가된 케이스:
+- 기본 모드는 Endless (`mode()` / `timerSeconds()` 0)
+- `start(MODE_ARCADE)` 모드 + 타이머 무장
+- `timerSeconds`는 비-arcade에서 0
+- arcade 타이머 만료 시 GAME_OVER로 전이 (`_timerTicks=1` 후 한 틱)
+- 매 PLAY 틱마다 `_timerTicks` 1씩 감쇠
+- PAUSE 동안 타이머 정지
+- PAUSE → `start()` 재개 시 모드/타이머 보존
+- puzzle 모드 빈 꽃이 자동 보충되지 않음 (30틱)
+- endless 모드 빈 꽃은 보충됨 (대조군)
+- `_isPlayable` false 시 puzzle은 GAME_OVER 분기
+
+## 13. 후속 후보
 
 - 남은 JS 파일들도 점진적으로 .ts로 이식 (현재는 ambient 선언으로 우회 중)
 - `flower.js` / `leaf.js` 인덱스 0–6 / 1–6 매핑을 자료구조로 분리해 가독성 정리
