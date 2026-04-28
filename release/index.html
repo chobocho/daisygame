@@ -678,6 +678,7 @@ class Flower {
                 let right_flower = Math.floor(leaf[1] / 10);
                 let right_leaf = leaf[1] % 10;
 
+                if (!flowerArr[right_flower]) continue; // puzzle N < 7 — skip absent neighbor
                 if (flowerArr[right_flower].leaf[right_leaf].isAlive() &&
                     this.leaf[i].color() === flowerArr[right_flower].leaf[right_leaf].color()) {
                     let maxCount = 100;
@@ -847,11 +848,9 @@ class DaisyGame {
         this._flowerArr[flower].turn();
         this.checkCollision(flower);
         if (!this._isPlayable()) {
-            if (this._mode === this.MODE_PUZZLE) {
-                this._enterGameOver();
-            } else {
-                this._init_flower();
-            }
+            // Re-seed the board in every mode. Puzzle ends only when the
+            // per-level timer hits 0, not when a momentary deadlock occurs.
+            this._init_flower();
         }
     }
 
@@ -1098,40 +1097,42 @@ class DaisyGame {
         this._tick++;
         this._reduceLeaf();
 
-        // Puzzle freezes the board: no auto-refill, no cadenced new leaves,
-        // no monochrome bonus (which would also add fresh leaves).
-        if (this._mode !== this.MODE_PUZZLE) {
-            let leaf_count = 0;
-            this._flowerArr.forEach(f => {
-                if (f.leaf_count() == 0) {
-                    for (let i = 0; i < 6; i++) {
+        // Leaf refill + cadenced new leaves + monochrome bonus run in every
+        // mode (including puzzle, which would otherwise dry up before the
+        // player could reach the target). Puzzle ends purely by timer.
+        let leaf_count = 0;
+        // Cap per-tick refill at 21 (3.5 flowers' worth) so puzzle levels
+        // with N >= 4 don't exceed the board's headroom every frame.
+        const refillThreshold = Math.min(21, this._flowerArr.length * 3);
+        this._flowerArr.forEach(f => {
+            if (f.leaf_count() == 0) {
+                for (let i = 0; i < 6; i++) {
+                    f.addLeaf(this._flowerArr);
+                }
+            }
+            leaf_count += f.leaf_count();
+        });
+
+        if (this._tick > 60 || leaf_count < refillThreshold) {
+            this._tick = 0;
+            this._addLeaf();
+        }
+
+        this._flowerArr.forEach(f => {
+            if (f.leaf_count() == 6) {
+                let count = 0;
+                for (let i = 1; i < 6; i++) {
+                    count += f.leaf[i].color() === f.leaf[0].color() ? 1 : 0;
+                }
+                if (count == 5) {
+                    for (let i = 1; i < 6; i++) {
+                        f.remove(i);
                         f.addLeaf(this._flowerArr);
                     }
+                    this.increaseScore(88);
                 }
-                leaf_count += f.leaf_count();
-            });
-
-            if (this._tick > 60 || leaf_count < 21) {
-                this._tick = 0;
-                this._addLeaf();
             }
-
-            this._flowerArr.forEach(f => {
-                if (f.leaf_count() == 6) {
-                    let count = 0;
-                    for (let i = 1; i < 6; i++) {
-                        count += f.leaf[i].color() === f.leaf[0].color() ? 1 : 0;
-                    }
-                    if (count == 5) {
-                        for (let i = 1; i < 6; i++) {
-                            f.remove(i);
-                            f.addLeaf(this._flowerArr);
-                        }
-                        this.increaseScore(88);
-                    }
-                }
-            });
-        }
+        });
 
         // Arcade / Puzzle countdown: zero ticks -> game over.
         if (this._mode === this.MODE_ARCADE || this._mode === this.MODE_PUZZLE) {

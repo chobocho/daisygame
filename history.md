@@ -536,7 +536,32 @@ target(L)  = 50 * L                                      // L1:50, L100:5000
 - `levelSelectPlay`가 unlocked 레벨에서 LEVEL_SELECT → PLAY 전이
 - locked 레벨로 강제 설정 후 `levelSelectPlay`는 LEVEL_SELECT 유지 (no-op)
 
-## 20. 후속 후보
+## 20. 퍼즐 모드에서 잎이 보충되지 않아 점수 누적 불가
+
+피드백: "퍼즐 모드에서 꽃잎이 추가 생성이 안되서 게임 점수를 못채워."
+
+### 원인
+
+§18에서 퍼즐을 "보드 고정 + 막히면 GAME_OVER"로 구현했었는데, 그러면 초기 잎(2~7 꽃 × 6장)을 모두 매치하면 보드가 마르고 더 이상 점수를 올릴 수 없음. L1 타깃 50점은 N=2/색 4개로는 사실상 도달 불가능.
+
+원작 퍼즐 모드 설명 ("take your time, plan your moves and maximize your score")도 시간 안에 매치를 쌓는 방식이지 보드 고갈 방식 아님.
+
+### 수정 (`js/daisygame.js`)
+
+- `increaseTick`에서 퍼즐 가드(`if (this._mode !== this.MODE_PUZZLE)`) 제거 — 잎 보충, cadence 보충, 단색 보너스 모두 모든 모드에서 작동
+- 보충 임계치(`leaf_count < 21`)를 N에 맞춰 가변화: `Math.min(21, N * 3)` — N=2면 6, N=7이면 21
+- `turnFlower`의 `_isPlayable === false` 분기 단순화: 모든 모드에서 `_init_flower()` 재시드 (퍼즐 GAME_OVER 분기 제거). 퍼즐은 **타이머 만료시에만** GAME_OVER
+
+### 부수 수정 (`js/flower.js`)
+
+- `Flower.addLeaf`가 하드코딩된 7-flower leafMap을 사용 → N<7 환경에서 `flowerArr[right_flower]`가 undefined일 때 크래시. `if (!flowerArr[right_flower]) continue;` 가드 추가
+
+### 테스트 갱신 (113건 유지)
+
+- 기존 "puzzle does not auto-refill" → "puzzle auto-refills cleared flowers" (정반대로 검증)
+- 기존 "puzzle going non-playable → GAME_OVER" → "puzzle stays in PLAY when momentarily non-playable (board re-seeds)"
+
+## 21. 후속 후보
 
 - 남은 JS 파일들도 점진적으로 .ts로 이식 (현재는 ambient 선언으로 우회 중)
 - `flower.js` / `leaf.js` 인덱스 0–6 / 1–6 매핑을 자료구조로 분리해 가독성 정리

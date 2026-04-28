@@ -175,14 +175,14 @@ test("DaisyGame: pausing then starting (no arg) resumes same mode without resett
   assert.equal(g.isPlayState(), true);
 });
 
-test("DaisyGame: puzzle mode does not auto-refill cleared flowers", () => {
+test("DaisyGame: puzzle mode auto-refills cleared flowers (matches arcade/endless)", () => {
   const g = fresh();
-  g.start(MODE_PUZZLE);
+  g.playPuzzleLevel(1);
   const flowers = g.getFlowers();
   for (let i = 0; i < 6; i++) flowers[0].remove(i);
-  assert.equal(flowers[0].leaf_count(), 0);
   for (let i = 0; i < 30; i++) g.increaseTick();
-  assert.equal(flowers[0].leaf_count(), 0, "puzzle must keep cleared flower empty");
+  assert.ok(flowers[0].leaf_count() > 0,
+    "puzzle should refill so the player can reach the target score");
 });
 
 test("DaisyGame: endless mode does refill cleared flowers", () => {
@@ -358,34 +358,15 @@ test("DaisyGame.restore: graceful failure when mode is non-numeric", () => {
   assert.equal(g.restore(broken), false);
 });
 
-test("DaisyGame: puzzle going non-playable transitions to GAME_OVER on next tap", () => {
+test("DaisyGame: puzzle stays in PLAY when momentarily non-playable (board re-seeds)", () => {
+  // The original game-over-on-stuck branch was wrong because puzzle now
+  // refills leaves; deadlocks should reset the board, not end the game.
   const g = fresh();
   g.playPuzzleLevel(1);
-  // Force an unwinnable state: every leaf gets the same isolated color and
-  // _isPlayable's neighbor-color check fails after the turn.
-  // Easiest path: clear every leaf so there are zero matches possible.
-  for (const f of g.getFlowers()) {
-    for (let i = 0; i < 6; i++) f.remove(i);
-  }
-  // Drain the life so leaves are fully gone (size 0).
-  for (let i = 0; i < 20; i++) g.increaseTick();
-  // _isPlayable returns true when leaf_count < 6, but with all-empty flowers
-  // there are no neighbor colors to match. Force a turn to trigger the check.
-  // The puzzle game-over check fires inside turnFlower.
-  // Setup matching pair, then trigger turn that clears it, leaving the
-  // board in a state where _isPlayable might still say playable due to
-  // <6 leaves. Simpler: directly force _state to verify the wiring:
-  // we already cover the wiring by checking that turnFlower in a
-  // non-playable puzzle state goes to GAME_OVER. Construct that:
-  const flowers = g.getFlowers();
-  // Give each flower a single leaf so _isPlayable's "leaf_count < 6" still
-  // returns true. To make truly non-playable, fill all flowers and ensure
-  // no neighbor colors match. Skip this and test the simpler invariant:
-  // that the puzzle branch calls GAME_OVER instead of resetting the board.
-  // Stub _isPlayable to return false.
   g._isPlayable = () => false;
+  const flowers = g.getFlowers();
   flowers[0].leaf[0]._color = 1;
   flowers[0].leaf[0]._life = 15;
   g.turnFlower(0);
-  assert.equal(g.isGameOverState(), true);
+  assert.equal(g.isPlayState(), true);
 });

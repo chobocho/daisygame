@@ -140,6 +140,7 @@ class Flower {
                 let right_flower = Math.floor(leaf[1] / 10);
                 let right_leaf = leaf[1] % 10;
 
+                if (!flowerArr[right_flower]) continue; // puzzle N < 7 — skip absent neighbor
                 if (flowerArr[right_flower].leaf[right_leaf].isAlive() &&
                     this.leaf[i].color() === flowerArr[right_flower].leaf[right_leaf].color()) {
                     let maxCount = 100;
