@@ -195,6 +195,40 @@ test("DaisyGame: endless mode does refill cleared flowers", () => {
   assert.ok(flowers[0].leaf_count() > 0, "endless must refill an empty flower");
 });
 
+// ---------- mixed rotation directions ----------
+
+test("DaisyGame: _init_flower assigns at least 2 CW and 2 CCW directions", () => {
+  // Repeat enough times to catch any pathological RNG slot.
+  for (let trial = 0; trial < 50; trial++) {
+    const g = fresh();
+    const flowers = g.getFlowers();
+    let cw = 0;
+    let ccw = 0;
+    for (const f of flowers) {
+      if (f.direction() === 1) cw++;
+      else if (f.direction() === -1) ccw++;
+    }
+    assert.equal(cw + ccw, 7, `trial ${trial}: total != 7`);
+    assert.ok(cw >= 2, `trial ${trial}: cw=${cw} (need >= 2)`);
+    assert.ok(ccw >= 2, `trial ${trial}: ccw=${ccw} (need >= 2)`);
+  }
+});
+
+test("DaisyGame: turnFlower respects per-flower direction", () => {
+  const g = fresh();
+  g.start();
+  const flowers = g.getFlowers();
+
+  // Force flower 0 to CCW and verify rotation matches push(shift()).
+  flowers[0].set_direction(-1);
+  const before = flowers[0].leaf.map((l) => l.color());
+  g.turnFlower(0);
+  const after = flowers[0].leaf.map((l) => l.color());
+  for (let i = 0; i < 6; i++) {
+    assert.equal(after[i], before[(i + 1) % 6]);
+  }
+});
+
 // ---------- serialize / restore (resume) ----------
 
 test("DaisyGame: serialize -> restore round-trips score, mode, timer, flowers", () => {

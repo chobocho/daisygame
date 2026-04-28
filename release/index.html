@@ -438,7 +438,19 @@ class Flower {
         this.leaf = [];
         this.index = index;
         this._small_radius = 10;
+        // Rotation direction applied by turn(). 1 = clockwise (visually
+        // unshift(pop())), -1 = counter-clockwise (push(shift())).
+        // Crazy Daisy mixes both flower types on the board.
+        this._direction = 1;
         this.init_leaf();
+    }
+
+    direction() {
+        return this._direction;
+    }
+
+    set_direction(d) {
+        this._direction = (d === -1) ? -1 : 1;
     }
 
     init_leaf() {
@@ -468,8 +480,13 @@ class Flower {
     }
 
     turn() {
-        // 마지막 요소를 앞으로 이동
-        this.leaf.unshift(this.leaf.pop());
+        if (this._direction === -1) {
+            // CCW: 첫 요소를 뒤로 이동
+            this.leaf.push(this.leaf.shift());
+        } else {
+            // CW: 마지막 요소를 앞으로 이동
+            this.leaf.unshift(this.leaf.pop());
+        }
     }
 
     is_inside(x, y, gStartX, gScale) {
@@ -495,6 +512,7 @@ class Flower {
             radius: this.radius,
             smallRadius: this._small_radius,
             leafCount: this._leaf_count,
+            direction: this._direction,
             leaves: this.leaf.map(l => l.serialize()),
         };
     }
@@ -507,6 +525,9 @@ class Flower {
         if (typeof d.y === 'number') this.y = d.y;
         if (typeof d.radius === 'number') this.radius = d.radius;
         if (typeof d.smallRadius === 'number') this._small_radius = d.smallRadius;
+        if (typeof d.direction === 'number') {
+            this._direction = (d.direction === -1) ? -1 : 1;
+        }
         for (let i = 0; i < 6; i++) {
             this.leaf[i].restore(d.leaves[i]);
         }
@@ -629,6 +650,15 @@ class DaisyGame {
             let x = center_x + Math.floor(radius * 3.5 * Math.cos(radians));
             let y = center_y + Math.floor(radius * 3.5 * Math.sin(radians));
             this._flowerArr[i + 1].set_pos(x, y, radius);
+        }
+
+        // 회전 방향 분배: 7송이 중 최소 2개 시계방향, 최소 2개 반시계방향,
+        // 나머지 3개는 매 게임마다 랜덤. [CW, CW, CCW, CCW, ?, ?, ?]를 셔플.
+        const dirs = [1, 1, -1, -1];
+        for (let i = 0; i < 3; i++) dirs.push(Math.random() < 0.5 ? 1 : -1);
+        dirs.sort(() => Math.random() - 0.5);
+        for (let i = 0; i < 7; i++) {
+            this._flowerArr[i].set_direction(dirs[i]);
         }
 
         // 같은 색상 꽃잎 변경
@@ -1573,7 +1603,7 @@ class DrawEngine {
             this._drawPetal(px, py, radians, length, width, palette);
         }
         // Yellow daisy disc (#2).
-        this._drawDaisyCenter(flower.x, flower.y, flower.radius);
+        this._drawDaisyCenter(flower.x, flower.y, flower.radius, flower.direction());
     }
     _drawPetal(cx, cy, angleRad, length, width, palette) {
         bufCtx.save();
@@ -1602,8 +1632,9 @@ class DrawEngine {
         bufCtx.fill();
         bufCtx.restore();
     }
-    // Painted daisy center — yellow/orange radial gradient + clockwise rotation arrow.
-    _drawDaisyCenter(cx, cy, r) {
+    // Painted daisy center — yellow/orange radial gradient + rotation arrow
+    // (clockwise or counter-clockwise depending on the flower's direction).
+    _drawDaisyCenter(cx, cy, r, direction = 1) {
         bufCtx.save();
         // White cushion ring behind the disc to lift it off the petals.
         bufCtx.fillStyle = "rgba(255,255,255,0.85)";
@@ -1628,16 +1659,20 @@ class DrawEngine {
         bufCtx.ellipse(cx - r * 0.35, cy - r * 0.4, r * 0.3, r * 0.18, -0.4, 0, Math.PI * 2);
         bufCtx.fill();
         bufCtx.restore();
-        // Clockwise rotation arrow showing how the petals will move on tap.
-        // Flower.turn() does unshift(pop()), shifting each leaf one slot CW on screen.
-        this._drawRotationArrow(cx, cy, r);
+        // Rotation arrow showing how the petals will move on tap. CCW flowers
+        // are drawn by horizontally mirroring the CW arrow.
+        this._drawRotationArrow(cx, cy, r, direction);
     }
-    // CW rotation indicator drawn inside the daisy center disc.
-    // ~180° arc across the top half (9 o'clock → 12 → 3), with the arrow tip
+    // Rotation indicator drawn inside the daisy center disc.
+    // CW: ~180° arc across the top half (9 o'clock → 12 → 3), arrow tip
     // descending past 3 o'clock to show the CW direction.
-    _drawRotationArrow(cx, cy, discRadius) {
+    // CCW: same shape mirrored horizontally — arrow tip descends past
+    // 9 o'clock instead.
+    _drawRotationArrow(cx, cy, discRadius, direction = 1) {
         bufCtx.save();
         bufCtx.translate(cx, cy);
+        if (direction === -1)
+            bufCtx.scale(-1, 1);
         const r = discRadius * 0.5;
         const startAng = Math.PI; // 180° canvas = 9 o'clock
         const endAng = 0; // 0° canvas   = 3 o'clock

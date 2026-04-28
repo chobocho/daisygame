@@ -486,7 +486,7 @@ class DrawEngine {
             this._drawPetal(px, py, radians, length, width, palette);
         }
         // Yellow daisy disc (#2).
-        this._drawDaisyCenter(flower.x, flower.y, flower.radius);
+        this._drawDaisyCenter(flower.x, flower.y, flower.radius, flower.direction());
     }
     _drawPetal(cx, cy, angleRad, length, width, palette) {
         bufCtx.save();
@@ -515,8 +515,9 @@ class DrawEngine {
         bufCtx.fill();
         bufCtx.restore();
     }
-    // Painted daisy center — yellow/orange radial gradient + clockwise rotation arrow.
-    _drawDaisyCenter(cx, cy, r) {
+    // Painted daisy center — yellow/orange radial gradient + rotation arrow
+    // (clockwise or counter-clockwise depending on the flower's direction).
+    _drawDaisyCenter(cx, cy, r, direction = 1) {
         bufCtx.save();
         // White cushion ring behind the disc to lift it off the petals.
         bufCtx.fillStyle = "rgba(255,255,255,0.85)";
@@ -541,16 +542,20 @@ class DrawEngine {
         bufCtx.ellipse(cx - r * 0.35, cy - r * 0.4, r * 0.3, r * 0.18, -0.4, 0, Math.PI * 2);
         bufCtx.fill();
         bufCtx.restore();
-        // Clockwise rotation arrow showing how the petals will move on tap.
-        // Flower.turn() does unshift(pop()), shifting each leaf one slot CW on screen.
-        this._drawRotationArrow(cx, cy, r);
+        // Rotation arrow showing how the petals will move on tap. CCW flowers
+        // are drawn by horizontally mirroring the CW arrow.
+        this._drawRotationArrow(cx, cy, r, direction);
     }
-    // CW rotation indicator drawn inside the daisy center disc.
-    // ~180° arc across the top half (9 o'clock → 12 → 3), with the arrow tip
+    // Rotation indicator drawn inside the daisy center disc.
+    // CW: ~180° arc across the top half (9 o'clock → 12 → 3), arrow tip
     // descending past 3 o'clock to show the CW direction.
-    _drawRotationArrow(cx, cy, discRadius) {
+    // CCW: same shape mirrored horizontally — arrow tip descends past
+    // 9 o'clock instead.
+    _drawRotationArrow(cx, cy, discRadius, direction = 1) {
         bufCtx.save();
         bufCtx.translate(cx, cy);
+        if (direction === -1)
+            bufCtx.scale(-1, 1);
         const r = discRadius * 0.5;
         const startAng = Math.PI; // 180° canvas = 9 o'clock
         const endAng = 0; // 0° canvas   = 3 o'clock

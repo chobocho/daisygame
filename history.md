@@ -373,7 +373,38 @@
 - `start(mode)`는 resume 슬롯 삭제 (새 게임 = fresh start 시멘틱)
 - `start()` 인자 없이는 resume 슬롯 보존 (PAUSE → resume 시멘틱)
 
-## 16. 후속 후보
+## 16. CW / CCW 두 종류의 데이지 (원작 대응)
+
+원작 Crazy Daisy는 시계방향 / 반시계방향 두 종류 꽃이 함께 나옴. 우리 구현은 모두 시계방향만이었음.
+
+### 16.1 동작
+
+- 각 `Flower`에 `_direction` 필드(`1`=CW / `-1`=CCW)
+- `Flower.turn()`이 방향 분기:
+  - CW: `unshift(pop())` (기존)
+  - CCW: `push(shift())`
+- `_init_flower`에서 게임 시작 시 7개 방향 분배 — `[CW, CW, CCW, CCW, ?, ?, ?]`(랜덤 3개)을 `Math.random()` 셔플 → **CW ≥ 2, CCW ≥ 2 보장**, 매 게임 다른 배치
+
+### 16.2 변경
+
+- `js/flower.js`
+  - 생성자에 `_direction = 1`
+  - `direction()` / `set_direction(d)` 게터·세터 (입력 정규화: `-1`만 CCW, 그 외엔 CW)
+  - `turn()` 분기
+  - `serialize`/`restore`에 `direction` 포함 (없으면 CW 폴백)
+- `js/daisygame.js` `_init_flower` — 색상 충돌 해소 직전에 방향 분배 블록 삽입
+- `src/globals.d.ts` `FlowerLike`에 `direction()` 추가
+- `src/draw_engine.ts`
+  - `_drawDaisyCenter(cx, cy, r, direction = 1)` — direction 인자 받음
+  - `_drawRotationArrow(cx, cy, r, direction = 1)` — `direction === -1`이면 `bufCtx.scale(-1, 1)`로 수평 미러 → 동일 코드로 두 방향 모두 렌더
+  - `_drawFlower`가 `flower.direction()`을 전달
+
+### 16.3 테스트 (83건, +6)
+
+- `Flower` 신규: 기본 방향이 CW(1), CCW에서 `turn()`이 `push(shift())` 시멘틱, CCW 6회 회전 후 원상복귀, `serialize`/`restore`에서 direction 보존
+- `DaisyGame` 신규: `_init_flower`가 50회 시행 모두 `cw + ccw === 7`이며 `cw ≥ 2 && ccw ≥ 2`, `turnFlower(0)` 후 CCW로 강제된 꽃이 push/shift 시멘틱 따름
+
+## 17. 후속 후보
 
 - 남은 JS 파일들도 점진적으로 .ts로 이식 (현재는 ambient 선언으로 우회 중)
 - `flower.js` / `leaf.js` 인덱스 0–6 / 1–6 매핑을 자료구조로 분리해 가독성 정리

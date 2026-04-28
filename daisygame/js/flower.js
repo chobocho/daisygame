@@ -8,7 +8,19 @@ class Flower {
         this.leaf = [];
         this.index = index;
         this._small_radius = 10;
+        // Rotation direction applied by turn(). 1 = clockwise (visually
+        // unshift(pop())), -1 = counter-clockwise (push(shift())).
+        // Crazy Daisy mixes both flower types on the board.
+        this._direction = 1;
         this.init_leaf();
+    }
+
+    direction() {
+        return this._direction;
+    }
+
+    set_direction(d) {
+        this._direction = (d === -1) ? -1 : 1;
     }
 
     init_leaf() {
@@ -38,8 +50,13 @@ class Flower {
     }
 
     turn() {
-        // 마지막 요소를 앞으로 이동
-        this.leaf.unshift(this.leaf.pop());
+        if (this._direction === -1) {
+            // CCW: 첫 요소를 뒤로 이동
+            this.leaf.push(this.leaf.shift());
+        } else {
+            // CW: 마지막 요소를 앞으로 이동
+            this.leaf.unshift(this.leaf.pop());
+        }
     }
 
     is_inside(x, y, gStartX, gScale) {
@@ -65,6 +82,7 @@ class Flower {
             radius: this.radius,
             smallRadius: this._small_radius,
             leafCount: this._leaf_count,
+            direction: this._direction,
             leaves: this.leaf.map(l => l.serialize()),
         };
     }
@@ -77,6 +95,9 @@ class Flower {
         if (typeof d.y === 'number') this.y = d.y;
         if (typeof d.radius === 'number') this.radius = d.radius;
         if (typeof d.smallRadius === 'number') this._small_radius = d.smallRadius;
+        if (typeof d.direction === 'number') {
+            this._direction = (d.direction === -1) ? -1 : 1;
+        }
         for (let i = 0; i < 6; i++) {
             this.leaf[i].restore(d.leaves[i]);
         }

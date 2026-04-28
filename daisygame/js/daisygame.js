@@ -64,6 +64,15 @@ class DaisyGame {
             this._flowerArr[i + 1].set_pos(x, y, radius);
         }
 
+        // 회전 방향 분배: 7송이 중 최소 2개 시계방향, 최소 2개 반시계방향,
+        // 나머지 3개는 매 게임마다 랜덤. [CW, CW, CCW, CCW, ?, ?, ?]를 셔플.
+        const dirs = [1, 1, -1, -1];
+        for (let i = 0; i < 3; i++) dirs.push(Math.random() < 0.5 ? 1 : -1);
+        dirs.sort(() => Math.random() - 0.5);
+        for (let i = 0; i < 7; i++) {
+            this._flowerArr[i].set_direction(dirs[i]);
+        }
+
         // 같은 색상 꽃잎 변경
         for (let i = 0; i < 7; i++) {
             for (let leaf of this._leafMap[i]) {

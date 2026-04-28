@@ -49,6 +49,7 @@ interface FlowerLike {
   leaf: LeafLike[];
   small_radius(): number;
   is_inside(x: number, y: number, gStartX: number, gScale: number): boolean;
+  direction(): number;
 }
 
 interface DaisyGameLike {

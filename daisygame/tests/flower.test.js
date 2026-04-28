@@ -52,6 +52,41 @@ test("Flower: is_inside hits points within the radius", () => {
   assert.equal(f.is_inside(140, 100, 0, 1), false, "outside radius");
 });
 
+test("Flower: default direction is clockwise (1)", () => {
+  const f = new Flower(0);
+  assert.equal(f.direction(), 1);
+});
+
+test("Flower: CCW direction reverses turn() (push(shift()) semantics)", () => {
+  const f = new Flower(0);
+  f.set_direction(-1);
+  const before = f.leaf.map((l) => l.color());
+  f.turn();
+  const after = f.leaf.map((l) => l.color());
+  // CCW: after[i] === before[(i + 1) % 6]
+  for (let i = 0; i < 6; i++) {
+    assert.equal(after[i], before[(i + 1) % 6], `slot ${i}`);
+  }
+});
+
+test("Flower: six CCW turns return to the original arrangement", () => {
+  const f = new Flower(0);
+  f.set_direction(-1);
+  const before = f.leaf.map((l) => l.color());
+  for (let i = 0; i < 6; i++) f.turn();
+  assert.deepEqual(f.leaf.map((l) => l.color()), before);
+});
+
+test("Flower: serialize -> restore preserves direction", () => {
+  const a = new Flower(2);
+  a.set_direction(-1);
+  a.set_pos(100, 200, 30);
+  const snapshot = a.serialize();
+  const b = new Flower(0);
+  b.restore(snapshot);
+  assert.equal(b.direction(), -1);
+});
+
 test("Flower: serialize -> restore round-trips position and leaves", () => {
   const a = new Flower(3);
   a.set_pos(150, 250, 30);

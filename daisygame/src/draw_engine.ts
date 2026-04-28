@@ -607,7 +607,7 @@ class DrawEngine {
     }
 
     // Yellow daisy disc (#2).
-    this._drawDaisyCenter(flower.x, flower.y, flower.radius);
+    this._drawDaisyCenter(flower.x, flower.y, flower.radius, flower.direction());
   }
 
   private _drawPetal(
@@ -651,8 +651,9 @@ class DrawEngine {
     bufCtx.restore();
   }
 
-  // Painted daisy center — yellow/orange radial gradient + clockwise rotation arrow.
-  private _drawDaisyCenter(cx: number, cy: number, r: number): void {
+  // Painted daisy center — yellow/orange radial gradient + rotation arrow
+  // (clockwise or counter-clockwise depending on the flower's direction).
+  private _drawDaisyCenter(cx: number, cy: number, r: number, direction: number = 1): void {
     bufCtx.save();
     // White cushion ring behind the disc to lift it off the petals.
     bufCtx.fillStyle = "rgba(255,255,255,0.85)";
@@ -681,17 +682,20 @@ class DrawEngine {
     bufCtx.fill();
     bufCtx.restore();
 
-    // Clockwise rotation arrow showing how the petals will move on tap.
-    // Flower.turn() does unshift(pop()), shifting each leaf one slot CW on screen.
-    this._drawRotationArrow(cx, cy, r);
+    // Rotation arrow showing how the petals will move on tap. CCW flowers
+    // are drawn by horizontally mirroring the CW arrow.
+    this._drawRotationArrow(cx, cy, r, direction);
   }
 
-  // CW rotation indicator drawn inside the daisy center disc.
-  // ~180° arc across the top half (9 o'clock → 12 → 3), with the arrow tip
+  // Rotation indicator drawn inside the daisy center disc.
+  // CW: ~180° arc across the top half (9 o'clock → 12 → 3), arrow tip
   // descending past 3 o'clock to show the CW direction.
-  private _drawRotationArrow(cx: number, cy: number, discRadius: number): void {
+  // CCW: same shape mirrored horizontally — arrow tip descends past
+  // 9 o'clock instead.
+  private _drawRotationArrow(cx: number, cy: number, discRadius: number, direction: number = 1): void {
     bufCtx.save();
     bufCtx.translate(cx, cy);
+    if (direction === -1) bufCtx.scale(-1, 1);
 
     const r = discRadius * 0.5;
     const startAng = Math.PI;       // 180° canvas = 9 o'clock
