@@ -404,7 +404,17 @@
 - `Flower` 신규: 기본 방향이 CW(1), CCW에서 `turn()`이 `push(shift())` 시멘틱, CCW 6회 회전 후 원상복귀, `serialize`/`restore`에서 direction 보존
 - `DaisyGame` 신규: `_init_flower`가 50회 시행 모두 `cw + ccw === 7`이며 `cw ≥ 2 && ccw ≥ 2`, `turnFlower(0)` 후 CCW로 강제된 꽃이 push/shift 시멘틱 따름
 
-## 17. 후속 후보
+## 17. 회전 화살표 색상 코딩 (가독성)
+
+피드백: 두 방향 꽃을 한눈에 구분하기 어렵다 → 화살표 색을 방향별로 다르게.
+
+`draw_engine.ts` `_drawRotationArrow`:
+- **CW**: 빨강 `#D6303A`
+- **CCW**: 파랑 `#1F6FE0`
+- 흰색 후광 stroke은 그대로 (노란 디스크 위 가독성)
+- 본체 굵기·호 형태 동일
+
+## 18. 후속 후보
 
 - 남은 JS 파일들도 점진적으로 .ts로 이식 (현재는 ambient 선언으로 우회 중)
 - `flower.js` / `leaf.js` 인덱스 0–6 / 1–6 매핑을 자료구조로 분리해 가독성 정리

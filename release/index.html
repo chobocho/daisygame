@@ -1700,9 +1700,11 @@ class DrawEngine {
         bufCtx.closePath();
         bufCtx.stroke();
         bufCtx.fill();
-        // Dark arrow on top.
-        bufCtx.strokeStyle = "#5b2f0a";
-        bufCtx.fillStyle = "#5b2f0a";
+        // Color-coded arrow on top — red for CW, blue for CCW so the player can
+        // tell the two flower types apart at a glance.
+        const arrowColor = direction === -1 ? "#1F6FE0" : "#D6303A";
+        bufCtx.strokeStyle = arrowColor;
+        bufCtx.fillStyle = arrowColor;
         bufCtx.lineWidth = Math.max(1.4, discRadius * 0.09);
         bufCtx.beginPath();
         bufCtx.arc(0, 0, r, startAng, endAng, false);
