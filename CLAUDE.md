@@ -78,6 +78,3 @@ LocalDB (scoreDB) ──►  GameEngine ──► DaisyGame
 - 일부 주석과 로그 문자열은 한국어입니다 — 주변 코드를 수정할 때 그대로 보존하세요.
 - 언더스코어 접두 멤버(`_score`, `_flowerArr`, `_init_flower`)는 private로 취급합니다. 다른 클래스에서 직접 읽지 말고 게터를 통해 노출하세요.
 
-## 브랜치 정책
-
-이 작업은 `claude/add-claude-documentation-qpyYY` 브랜치에서 진행되며, 푸시도 동일 브랜치로만 합니다.
