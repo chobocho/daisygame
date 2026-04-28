@@ -944,7 +944,10 @@ class DaisyGame {
             }
         }
 
-        const scoreTable = [0, 1, 10, 20, 50, 128, 256, 0, 0, 0, 0, 0, 0, 0];
+        // Per-turn score by simultaneous-pair count. Index 1 is intentionally
+        // generous (5, not 1) so the puzzle target stays reachable in the
+        // shorter time budgets at higher levels.
+        const scoreTable = [0, 5, 10, 20, 50, 128, 256, 0, 0, 0, 0, 0, 0, 0];
         const gained = scoreTable[removedLeaf];
         this.increaseScore(gained);
 

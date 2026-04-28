@@ -96,6 +96,28 @@ test("DaisyGame: init clears the Effects queue", () => {
   assert.equal(Effects.particles.length, 0);
 });
 
+test("DaisyGame: a single matched pair awards 5 points", () => {
+  const g = fresh();
+  g.start();
+  const flowers = g.getFlowers();
+  // Kill every leaf so only our forced pair can match.
+  for (let f = 0; f < flowers.length; f++) {
+    for (let i = 0; i < 6; i++) {
+      flowers[f].leaf[i]._color = 0;
+      flowers[f].leaf[i]._life = 0;
+    }
+  }
+  // Force flower 0 to CW so leaf 5 moves into slot 0 on turn.
+  flowers[0].set_direction(1);
+  // _leafMap[0] entry [0, 13] pairs flower 0 leaf 0 with flower 1 leaf 3.
+  flowers[0].leaf[5]._color = 3;
+  flowers[0].leaf[5]._life = 15;
+  flowers[1].leaf[3]._color = 3;
+  flowers[1].leaf[3]._life = 15;
+  g.turnFlower(0);
+  assert.equal(g.score(), 5, "single pair should award exactly 5 points");
+});
+
 test("DaisyGame: turnFlower scores when a forced color match is set up", () => {
   const g = fresh();
   g.start();
