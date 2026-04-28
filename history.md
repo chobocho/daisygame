@@ -269,7 +269,17 @@
 - endless 모드 빈 꽃은 보충됨 (대조군)
 - `_isPlayable` false 시 puzzle은 GAME_OVER 분기
 
-## 13. 후속 후보
+## 13. 모드 화면 힌트 텍스트 겹침 수정
+
+3개 모드 버튼 도입 후, IDLE / GAME_OVER 화면의 힌트 텍스트(y=230)가 Endless 버튼(cy=232, halfH=24 → y=208..256)과 정중앙에서 겹쳐 보이는 보고.
+
+수정 (`draw_engine.ts`):
+- `_drawHint(text, y = 230)` — y 파라미터 추가
+- **IDLE** — 키보드 단축키 힌트("Pick a mode — A / Z / E") 제거. `Arcade` / `Puzzle` / `Endless` 라벨이 자체 설명이라 별도 힌트 불필요
+- **GAME_OVER** — 힌트를 y=230 → **y=380** (BEST 배너 y=290..360 아래)으로 이동
+- **PAUSE** — 그대로 (Resume 버튼 y=100..200, 힌트 y=230이라 원래 비겹침)
+
+## 14. 후속 후보
 
 - 남은 JS 파일들도 점진적으로 .ts로 이식 (현재는 ambient 선언으로 우회 중)
 - `flower.js` / `leaf.js` 인덱스 0–6 / 1–6 매핑을 자료구조로 분리해 가독성 정리

@@ -95,7 +95,6 @@ class DrawEngine {
             this._drawWordmark("Crazy Daisy");
             this._drawModeButtons();
             this._drawHighScore();
-            this._drawHint("Pick a mode \u2014 A / Z / E");
         }
         else if (this.game.isPauseState()) {
             this._drawWordmark("Paused");
@@ -109,7 +108,7 @@ class DrawEngine {
             this._drawWordmark(title);
             this._drawModeButtons();
             this._drawHighScore();
-            this._drawHint("Pick a mode to play again");
+            this._drawHint("Pick a mode to play again", 380);
         }
         else if (this.game.isPlayState()) {
             this._drawIconButton(40, 40, 26, "pause");
@@ -270,7 +269,7 @@ class DrawEngine {
         bufCtx.fillText(text, 200, 58);
         bufCtx.restore();
     }
-    _drawHint(text) {
+    _drawHint(text, y = 230) {
         bufCtx.save();
         bufCtx.font = "italic 16px " + DrawEngine.UI_FONT;
         bufCtx.textAlign = "center";
@@ -278,8 +277,8 @@ class DrawEngine {
         bufCtx.fillStyle = "rgba(255,255,255,0.92)";
         bufCtx.lineWidth = 3;
         bufCtx.strokeStyle = "rgba(0,0,0,0.45)";
-        bufCtx.strokeText(text, 200, 230);
-        bufCtx.fillText(text, 200, 230);
+        bufCtx.strokeText(text, 200, y);
+        bufCtx.fillText(text, 200, y);
         bufCtx.restore();
     }
     // Decorative small daisy used by the wordmark.

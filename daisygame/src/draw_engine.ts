@@ -161,7 +161,6 @@ class DrawEngine {
       this._drawWordmark("Crazy Daisy");
       this._drawModeButtons();
       this._drawHighScore();
-      this._drawHint("Pick a mode \u2014 A / Z / E");
     } else if (this.game.isPauseState()) {
       this._drawWordmark("Paused");
       this._drawPlayButton(200, 150, 100, 32, "Resume");
@@ -173,7 +172,7 @@ class DrawEngine {
       this._drawWordmark(title);
       this._drawModeButtons();
       this._drawHighScore();
-      this._drawHint("Pick a mode to play again");
+      this._drawHint("Pick a mode to play again", 380);
     } else if (this.game.isPlayState()) {
       this._drawIconButton(40, 40, 26, "pause");
       this._drawIconButton(360, 560, 26, this.game.isPlayMusic() ? "music" : "mute");
@@ -371,7 +370,7 @@ class DrawEngine {
     bufCtx.restore();
   }
 
-  private _drawHint(text: string): void {
+  private _drawHint(text: string, y: number = 230): void {
     bufCtx.save();
     bufCtx.font = "italic 16px " + DrawEngine.UI_FONT;
     bufCtx.textAlign = "center";
@@ -379,8 +378,8 @@ class DrawEngine {
     bufCtx.fillStyle = "rgba(255,255,255,0.92)";
     bufCtx.lineWidth = 3;
     bufCtx.strokeStyle = "rgba(0,0,0,0.45)";
-    bufCtx.strokeText(text, 200, 230);
-    bufCtx.fillText(text, 200, 230);
+    bufCtx.strokeText(text, 200, y);
+    bufCtx.fillText(text, 200, y);
     bufCtx.restore();
   }
 
