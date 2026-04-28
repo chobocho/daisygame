@@ -493,6 +493,28 @@ class Leaf {
         if (this._birth < this._birthMax) this._birth++;
     }
 
+    // Rainbow leaf: matches any color in checkCollision. Color 8 is reserved
+    // for this and never appears in the regular _colorTable.
+    setRainbow() {
+        this._color = 8;
+        this._life = this._origin_life;
+    }
+
+    isRainbow() {
+        return this._color === 8;
+    }
+
+    // Render-side helpers — exposed so the draw engine can play different
+    // animations for rainbow leaves (grow + fade) without re-deriving from
+    // size().
+    get_life_ratio() {
+        return this._life / this._origin_life;
+    }
+
+    get_birth_ratio() {
+        return this._birth / this._birthMax;
+    }
+
     reset() {
         this._colorIdx = (this._colorIdx + 1) % this._colorTable.length;
         this._color = this._colorTable[this._colorIdx];
@@ -740,6 +762,10 @@ class DaisyGame {
         this._colorCount = 6;
         this._puzzleLevel = 0;
         this._puzzleProgress = (typeof PuzzleProgress !== 'undefined') ? new PuzzleProgress() : null;
+        // Rainbow leaf cooldown (ticks). 30ms tick rate, so 270..333 ≈ 8..10s.
+        this.RAINBOW_MIN_TICKS = 270;
+        this.RAINBOW_MAX_TICKS = 333;
+        this._rainbowCooldown = this._nextRainbowInterval();
 
         this._startX = startX;
         this._startY = startY;
@@ -886,6 +912,10 @@ class DaisyGame {
     }
 
     _isPlayable() {
+        // A rainbow leaf can always rotate into a matching neighbor, so the
+        // board is playable as long as one exists.
+        if (this._hasRainbow()) return true;
+
         const N = this._flowerArr.length;
         const leaf_color = Array.from({ length: N }, () => new Set());
 
@@ -925,6 +955,7 @@ class DaisyGame {
         }
 
         let removedLeaf = 0;
+        let rainbowPairs = 0;
         const matches = [];
         for (let leaf of this._leafMap[flower]) {
             let left_flower = Math.floor(leaf[0] / 10);
@@ -932,12 +963,16 @@ class DaisyGame {
             let right_flower = Math.floor(leaf[1] / 10);
             let right_flower_leaf = leaf[1] % 10;
 
-            if (this._flowerArr[left_flower].leaf[left_flower_leaf].isAlive() &&
-                this._flowerArr[right_flower].leaf[right_flower_leaf].isAlive() &&
-                this._flowerArr[left_flower].leaf[left_flower_leaf].color() === this._flowerArr[right_flower].leaf[right_flower_leaf].color()) {
-                const colorIdx = this._flowerArr[left_flower].leaf[left_flower_leaf].color();
+            const ll = this._flowerArr[left_flower].leaf[left_flower_leaf];
+            const rl = this._flowerArr[right_flower].leaf[right_flower_leaf];
+
+            // Rainbow leaves act as wildcards — they match any color.
+            const colorMatch = (ll.color() === rl.color()) || ll.isRainbow() || rl.isRainbow();
+            if (ll.isAlive() && rl.isAlive() && colorMatch) {
+                const colorIdx = ll.isRainbow() ? rl.color() : ll.color();
                 const lp = this._leafScreenPos(left_flower, left_flower_leaf);
                 const rp = this._leafScreenPos(right_flower, right_flower_leaf);
+                if (ll.isRainbow() || rl.isRainbow()) rainbowPairs++;
                 this._flowerArr[left_flower].remove(left_flower_leaf);
                 this._flowerArr[right_flower].remove(right_flower_leaf);
                 removedLeaf++;
@@ -945,11 +980,11 @@ class DaisyGame {
             }
         }
 
-        // Per-turn score by simultaneous-pair count. Index 1 is intentionally
-        // generous (5, not 1) so the puzzle target stays reachable in the
-        // shorter time budgets at higher levels.
+        // Per-turn score by simultaneous-pair count. Index 1 is generous (5)
+        // so puzzle targets stay reachable. Each rainbow-involved pair adds
+        // a flat +3 (5 + 3 = 8 for a single rainbow match).
         const scoreTable = [0, 5, 10, 20, 50, 128, 256, 0, 0, 0, 0, 0, 0, 0];
-        const gained = scoreTable[removedLeaf];
+        const gained = scoreTable[removedLeaf] + 3 * rainbowPairs;
         this.increaseScore(gained);
 
         if (removedLeaf === 0) return;
@@ -1192,6 +1227,15 @@ class DaisyGame {
             }
         });
 
+        // Rainbow leaf cooldown: every 8–10s, or any time the board is
+        // truly stuck and has no rainbow yet, drop one into an empty slot.
+        this._rainbowCooldown--;
+        const stuck = !this._hasRainbow() && !this._isPlayable();
+        if (this._rainbowCooldown <= 0 || stuck) {
+            this._trySpawnRainbow();
+            this._rainbowCooldown = this._nextRainbowInterval();
+        }
+
         // Arcade / Puzzle countdown: zero ticks -> game over.
         if (this._mode === this.MODE_ARCADE || this._mode === this.MODE_PUZZLE) {
             this._timerTicks--;
@@ -1200,6 +1244,37 @@ class DaisyGame {
                 this._enterGameOver();
             }
         }
+    }
+
+    _nextRainbowInterval() {
+        return this.RAINBOW_MIN_TICKS +
+            Math.floor(Math.random() * (this.RAINBOW_MAX_TICKS - this.RAINBOW_MIN_TICKS + 1));
+    }
+
+    _hasRainbow() {
+        for (const f of this._flowerArr) {
+            for (const l of f.leaf) {
+                if (l.isRainbow()) return true;
+            }
+        }
+        return false;
+    }
+
+    _trySpawnRainbow() {
+        const candidates = [];
+        for (const f of this._flowerArr) {
+            for (let i = 0; i < 6; i++) {
+                if (f.leaf[i].color() === 0) {
+                    candidates.push({ flower: f, idx: i });
+                }
+            }
+        }
+        if (candidates.length === 0) return false;
+        const pick = candidates[Math.floor(Math.random() * candidates.length)];
+        pick.flower.leaf[pick.idx].setRainbow();
+        pick.flower.leaf[pick.idx].playBirth();
+        pick.flower._leaf_count = Math.min(6, pick.flower._leaf_count + 1);
+        return true;
     }
 
     _enterGameOver() {
@@ -2230,6 +2305,30 @@ class DrawEngine {
         // Petals first so they tuck behind the disc.
         for (let i = 0; i < 6; i++) {
             const leaf = flower.leaf[i];
+            if (leaf.color() === 0)
+                continue;
+            const angleDeg = 60 * i;
+            const radians = (angleDeg * Math.PI) / 180;
+            const distance = flower.radius;
+            const px = flower.x + Math.cos(radians) * distance;
+            const py = flower.y + Math.sin(radians) * distance;
+            if (leaf.isRainbow()) {
+                // Rainbow leaves use a grow + fade death animation, so we drive
+                // length / width / alpha from life and birth fractions directly.
+                const lifeFrac = leaf.get_life_ratio();
+                const birthFrac = leaf.get_birth_ratio();
+                const dying = !leaf.isAlive() && lifeFrac > 0;
+                const scale = dying
+                    ? birthFrac * (1 + (1 - lifeFrac) * 0.7)
+                    : lifeFrac * birthFrac;
+                const alpha = dying ? lifeFrac : 1;
+                if (scale <= 0 || alpha <= 0)
+                    continue;
+                const length = small_radius * 3.4 * scale;
+                const width = small_radius * 1.9 * scale;
+                this._drawRainbowPetal(px, py, radians, length, width, alpha);
+                continue;
+            }
             const leafSize = leaf.size();
             if (leafSize === 0)
                 continue;
@@ -2241,11 +2340,6 @@ class DrawEngine {
             // under the (now smaller) yellow disc — that's how a real daisy reads.
             const length = small_radius * 3.4 * lifeRatio;
             const width = small_radius * 1.9 * lifeRatio;
-            const angleDeg = 60 * i;
-            const radians = (angleDeg * Math.PI) / 180;
-            const distance = flower.radius;
-            const px = flower.x + Math.cos(radians) * distance;
-            const py = flower.y + Math.sin(radians) * distance;
             this._drawPetal(px, py, radians, length, width, palette);
         }
         // Smaller yellow daisy disc on top of the petal inner tips.
@@ -2275,6 +2369,41 @@ class DrawEngine {
         bufCtx.beginPath();
         bufCtx.ellipse(halfL * 0.45, -halfW * 0.35, halfL * 0.22, halfW * 0.22, 0, 0, Math.PI * 2);
         bufCtx.fillStyle = "rgba(255,255,255,0.35)";
+        bufCtx.fill();
+        bufCtx.restore();
+    }
+    // Rainbow petal: same teardrop path as _drawPetal but filled with a
+    // multi-stop spectrum gradient. Caller controls overall alpha for the
+    // grow-and-fade death animation.
+    _drawRainbowPetal(cx, cy, angleRad, length, width, alpha) {
+        bufCtx.save();
+        bufCtx.globalAlpha = Math.max(0, Math.min(1, alpha));
+        bufCtx.translate(cx, cy);
+        bufCtx.rotate(angleRad);
+        const halfL = length / 2;
+        const halfW = width / 2;
+        const grad = bufCtx.createLinearGradient(-halfL, 0, halfL, 0);
+        grad.addColorStop(0.00, "#FF6B6B"); // red
+        grad.addColorStop(0.20, "#FFA45C"); // orange
+        grad.addColorStop(0.38, "#FFD23F"); // yellow
+        grad.addColorStop(0.55, "#7DD3A0"); // green
+        grad.addColorStop(0.72, "#5BD2F2"); // cyan
+        grad.addColorStop(0.86, "#5B7BF2"); // blue
+        grad.addColorStop(1.00, "#C18BF7"); // purple
+        bufCtx.beginPath();
+        bufCtx.moveTo(-halfL, 0);
+        bufCtx.bezierCurveTo(-halfL * 0.4, -halfW * 1.05, halfL * 0.55, -halfW, halfL, 0);
+        bufCtx.bezierCurveTo(halfL * 0.55, halfW, -halfL * 0.4, halfW * 1.05, -halfL, 0);
+        bufCtx.closePath();
+        bufCtx.fillStyle = grad;
+        bufCtx.fill();
+        bufCtx.lineWidth = 1;
+        bufCtx.strokeStyle = "rgba(120, 60, 130, 0.45)";
+        bufCtx.stroke();
+        // Sparkle highlight near the outer tip.
+        bufCtx.beginPath();
+        bufCtx.ellipse(halfL * 0.45, -halfW * 0.35, halfL * 0.22, halfW * 0.22, 0, 0, Math.PI * 2);
+        bufCtx.fillStyle = "rgba(255, 255, 255, 0.55)";
         bufCtx.fill();
         bufCtx.restore();
     }

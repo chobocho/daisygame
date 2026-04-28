@@ -681,7 +681,82 @@ PAUSE → "Level Select" 탭 → 현재 라운드 점수 폐기 + resume 슬롯 
 - `GameEngine.gotoLevelSelect`: PAUSE 중 호출 → LEVEL_SELECT 전이 + resume 슬롯 삭제 + score 0
 - 부수: 기존 "turnFlower scores when a forced color match" 테스트가 random direction 할당에 의존하던 flaky 케이스 → `flowers[0].set_direction(1)`로 결정론화
 
-## 25. 후속 후보
+## 25. 무지개 꽃잎 (와일드카드 매치, 8점, grow+fade death)
+
+피드백: "어떤 꽃잎과도 매칭이 되는 무지개 꽃잎을 넣어줘. 없앨 수 있는 꽃잎의 조합이 없거나 8~10초마다 빈 자리에 하나씩 생기게 해줘. 점수는 8점으로 해줘. 사라질때 이펙트는 꽃잎이 커지면서 사라지게 해줘."
+
+### 25.1 데이터 모델
+
+- `Leaf._color = 8` → **무지개**. 정상 색상 테이블(1..7)에는 절대 들어가지 않음 — `setRainbow()`로만 도달
+- 새 API:
+  - `setRainbow()` — color = 8, life = origin_life
+  - `isRainbow()` — color === 8
+  - `get_life_ratio()` / `get_birth_ratio()` — 렌더용 0..1 비율 (grow+fade death용)
+
+### 25.2 매치 로직 (`checkCollision`)
+
+```js
+const colorMatch = (ll.color() === rl.color()) || ll.isRainbow() || rl.isRainbow();
+```
+
+무지개는 와일드카드. 점수:
+```js
+const gained = scoreTable[removedLeaf] + 3 * rainbowPairs;
+```
+정상 단일 매치 5점은 그대로, 무지개 관여 매치마다 +3 (5+3=8). 동시 2쌍 모두 무지개 = 10+6=16, 단일 무지개 짝 = 8.
+
+### 25.3 스폰 로직 (`increaseTick`)
+
+- `_rainbowCooldown` 카운터, 시작 시 8~10초(270~333틱)에서 랜덤 초기화
+- 매 틱 감쇠. 0 도달 시 또는 `!_isPlayable() && !_hasRainbow()` 시 스폰
+- `_trySpawnRainbow()`: color=0인 빈 슬롯들 수집 → 랜덤 1개 선택 → `setRainbow()` + `playBirth()` + `_leaf_count` 증가
+- 스폰 후 쿨다운 재초기화
+
+### 25.4 데드락 회피 (`_isPlayable`)
+
+```js
+if (this._hasRainbow()) return true;
+```
+
+보드에 무지개가 있으면 회전 한 번이면 반드시 매치 가능 → 즉시 true. 기존 leaf_count<6 / 색 교집합 검사보다 빠른 출구.
+
+### 25.5 렌더 (`_drawRainbowPetal`)
+
+`_drawPetal`과 동일 베지어 path지만 무지개 7-stop linear gradient(빨강→주황→노랑→초록→청록→파랑→보라). 외곽선 + 흰색 sparkle 하이라이트. caller가 `alpha`를 넘김.
+
+### 25.6 Grow-and-Fade Death
+
+`_drawFlower`에서 무지개 잎 분기:
+
+```ts
+if (leaf.isRainbow()) {
+  const lifeFrac = leaf.get_life_ratio();
+  const birthFrac = leaf.get_birth_ratio();
+  const dying = !leaf.isAlive() && lifeFrac > 0;
+  const scale = dying
+    ? birthFrac * (1 + (1 - lifeFrac) * 0.7)  // 1.0 → 1.7로 grow
+    : lifeFrac * birthFrac;
+  const alpha = dying ? lifeFrac : 1;          // 1.0 → 0 fade
+  // ...
+}
+```
+
+`Leaf.reduceSize`가 매 틱 life를 깎으면 무지개는 보통 잎처럼 줄어드는 게 아니라 **확대되며 투명해짐**.
+
+### 25.7 테스트 (132건, +7)
+
+Leaf:
+- `setRainbow` → color 8, alive
+- `get_life_ratio` / `get_birth_ratio` 정상 노출
+
+DaisyGame:
+- 무지개 + 정상 색 매치 → 8점
+- 무지개 + 무지개 매치 → 8점 (단일쌍 보너스)
+- `_trySpawnRainbow`가 빈 슬롯에 정확히 1개 무지개 배치
+- `_trySpawnRainbow`는 빈 슬롯 없으면 false 반환
+- `_isPlayable`이 보드에 무지개 있으면 즉시 true
+
+## 26. 후속 후보
 
 - 남은 JS 파일들도 점진적으로 .ts로 이식 (현재는 ambient 선언으로 우회 중)
 - `flower.js` / `leaf.js` 인덱스 0–6 / 1–6 매핑을 자료구조로 분리해 가독성 정리

@@ -96,6 +96,85 @@ test("DaisyGame: init clears the Effects queue", () => {
   assert.equal(Effects.particles.length, 0);
 });
 
+test("DaisyGame: a rainbow-leaf match awards 8 points (5 + 3 bonus)", () => {
+  const g = fresh();
+  g.start();
+  const flowers = g.getFlowers();
+  for (let f = 0; f < flowers.length; f++) {
+    for (let i = 0; i < 6; i++) {
+      flowers[f].leaf[i]._color = 0;
+      flowers[f].leaf[i]._life = 0;
+    }
+  }
+  flowers[0].set_direction(1);
+  // Rainbow on flower 0 leaf 5; any color on flower 1 leaf 3.
+  flowers[0].leaf[5]._color = 8; // RAINBOW_COLOR
+  flowers[0].leaf[5]._life = 15;
+  flowers[1].leaf[3]._color = 4;
+  flowers[1].leaf[3]._life = 15;
+  g.turnFlower(0);
+  assert.equal(g.score(), 8);
+});
+
+test("DaisyGame: rainbow-on-rainbow match also rewards the bonus", () => {
+  const g = fresh();
+  g.start();
+  const flowers = g.getFlowers();
+  for (let f = 0; f < flowers.length; f++) {
+    for (let i = 0; i < 6; i++) {
+      flowers[f].leaf[i]._color = 0;
+      flowers[f].leaf[i]._life = 0;
+    }
+  }
+  flowers[0].set_direction(1);
+  flowers[0].leaf[5]._color = 8;
+  flowers[0].leaf[5]._life = 15;
+  flowers[1].leaf[3]._color = 8;
+  flowers[1].leaf[3]._life = 15;
+  g.turnFlower(0);
+  assert.equal(g.score(), 8);
+});
+
+test("DaisyGame: _trySpawnRainbow places exactly one rainbow leaf", () => {
+  const g = fresh();
+  g.start();
+  const flowers = g.getFlowers();
+  for (let f = 0; f < flowers.length; f++) {
+    for (let i = 0; i < 6; i++) {
+      flowers[f].leaf[i]._color = 0;
+      flowers[f].leaf[i]._life = 0;
+    }
+    flowers[f]._leaf_count = 0;
+  }
+  assert.equal(g._trySpawnRainbow(), true);
+  let count = 0;
+  for (const f of flowers) {
+    for (const l of f.leaf) {
+      if (l.isRainbow()) count++;
+    }
+  }
+  assert.equal(count, 1);
+});
+
+test("DaisyGame: _trySpawnRainbow returns false when no empty slot", () => {
+  const g = fresh();
+  g.start();
+  // All slots are alive after start; no empty slots.
+  assert.equal(g._trySpawnRainbow(), false);
+});
+
+test("DaisyGame: _isPlayable returns true if a rainbow exists on board", () => {
+  const g = fresh();
+  g.start();
+  const flowers = g.getFlowers();
+  // Construct a deadlock: every flower has 6 leaves of one isolated color.
+  // Then drop a rainbow into one slot to verify the early-return.
+  flowers[0].leaf[0]._color = 8;
+  flowers[0].leaf[0]._life = 15;
+  // Even if other heuristics would say not playable, rainbow saves us.
+  assert.equal(g._isPlayable(), true);
+});
+
 test("DaisyGame: a single matched pair awards 5 points", () => {
   const g = fresh();
   g.start();

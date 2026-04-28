@@ -17,6 +17,10 @@ class DaisyGame {
         this._colorCount = 6;
         this._puzzleLevel = 0;
         this._puzzleProgress = (typeof PuzzleProgress !== 'undefined') ? new PuzzleProgress() : null;
+        // Rainbow leaf cooldown (ticks). 30ms tick rate, so 270..333 ≈ 8..10s.
+        this.RAINBOW_MIN_TICKS = 270;
+        this.RAINBOW_MAX_TICKS = 333;
+        this._rainbowCooldown = this._nextRainbowInterval();
 
         this._startX = startX;
         this._startY = startY;
@@ -163,6 +167,10 @@ class DaisyGame {
     }
 
     _isPlayable() {
+        // A rainbow leaf can always rotate into a matching neighbor, so the
+        // board is playable as long as one exists.
+        if (this._hasRainbow()) return true;
+
         const N = this._flowerArr.length;
         const leaf_color = Array.from({ length: N }, () => new Set());
 
@@ -202,6 +210,7 @@ class DaisyGame {
         }
 
         let removedLeaf = 0;
+        let rainbowPairs = 0;
         const matches = [];
         for (let leaf of this._leafMap[flower]) {
             let left_flower = Math.floor(leaf[0] / 10);
@@ -209,12 +218,16 @@ class DaisyGame {
             let right_flower = Math.floor(leaf[1] / 10);
             let right_flower_leaf = leaf[1] % 10;
 
-            if (this._flowerArr[left_flower].leaf[left_flower_leaf].isAlive() &&
-                this._flowerArr[right_flower].leaf[right_flower_leaf].isAlive() &&
-                this._flowerArr[left_flower].leaf[left_flower_leaf].color() === this._flowerArr[right_flower].leaf[right_flower_leaf].color()) {
-                const colorIdx = this._flowerArr[left_flower].leaf[left_flower_leaf].color();
+            const ll = this._flowerArr[left_flower].leaf[left_flower_leaf];
+            const rl = this._flowerArr[right_flower].leaf[right_flower_leaf];
+
+            // Rainbow leaves act as wildcards — they match any color.
+            const colorMatch = (ll.color() === rl.color()) || ll.isRainbow() || rl.isRainbow();
+            if (ll.isAlive() && rl.isAlive() && colorMatch) {
+                const colorIdx = ll.isRainbow() ? rl.color() : ll.color();
                 const lp = this._leafScreenPos(left_flower, left_flower_leaf);
                 const rp = this._leafScreenPos(right_flower, right_flower_leaf);
+                if (ll.isRainbow() || rl.isRainbow()) rainbowPairs++;
                 this._flowerArr[left_flower].remove(left_flower_leaf);
                 this._flowerArr[right_flower].remove(right_flower_leaf);
                 removedLeaf++;
@@ -222,11 +235,11 @@ class DaisyGame {
             }
         }
 
-        // Per-turn score by simultaneous-pair count. Index 1 is intentionally
-        // generous (5, not 1) so the puzzle target stays reachable in the
-        // shorter time budgets at higher levels.
+        // Per-turn score by simultaneous-pair count. Index 1 is generous (5)
+        // so puzzle targets stay reachable. Each rainbow-involved pair adds
+        // a flat +3 (5 + 3 = 8 for a single rainbow match).
         const scoreTable = [0, 5, 10, 20, 50, 128, 256, 0, 0, 0, 0, 0, 0, 0];
-        const gained = scoreTable[removedLeaf];
+        const gained = scoreTable[removedLeaf] + 3 * rainbowPairs;
         this.increaseScore(gained);
 
         if (removedLeaf === 0) return;
@@ -469,6 +482,15 @@ class DaisyGame {
             }
         });
 
+        // Rainbow leaf cooldown: every 8–10s, or any time the board is
+        // truly stuck and has no rainbow yet, drop one into an empty slot.
+        this._rainbowCooldown--;
+        const stuck = !this._hasRainbow() && !this._isPlayable();
+        if (this._rainbowCooldown <= 0 || stuck) {
+            this._trySpawnRainbow();
+            this._rainbowCooldown = this._nextRainbowInterval();
+        }
+
         // Arcade / Puzzle countdown: zero ticks -> game over.
         if (this._mode === this.MODE_ARCADE || this._mode === this.MODE_PUZZLE) {
             this._timerTicks--;
@@ -477,6 +499,37 @@ class DaisyGame {
                 this._enterGameOver();
             }
         }
+    }
+
+    _nextRainbowInterval() {
+        return this.RAINBOW_MIN_TICKS +
+            Math.floor(Math.random() * (this.RAINBOW_MAX_TICKS - this.RAINBOW_MIN_TICKS + 1));
+    }
+
+    _hasRainbow() {
+        for (const f of this._flowerArr) {
+            for (const l of f.leaf) {
+                if (l.isRainbow()) return true;
+            }
+        }
+        return false;
+    }
+
+    _trySpawnRainbow() {
+        const candidates = [];
+        for (const f of this._flowerArr) {
+            for (let i = 0; i < 6; i++) {
+                if (f.leaf[i].color() === 0) {
+                    candidates.push({ flower: f, idx: i });
+                }
+            }
+        }
+        if (candidates.length === 0) return false;
+        const pick = candidates[Math.floor(Math.random() * candidates.length)];
+        pick.flower.leaf[pick.idx].setRainbow();
+        pick.flower.leaf[pick.idx].playBirth();
+        pick.flower._leaf_count = Math.min(6, pick.flower._leaf_count + 1);
+        return true;
     }
 
     _enterGameOver() {

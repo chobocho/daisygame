@@ -106,6 +106,24 @@ test("Leaf: serialize -> restore preserves the birth animation phase", () => {
   assert.equal(b.size(), a.size());
 });
 
+test("Leaf: setRainbow marks the leaf as rainbow and alive", () => {
+  const l = new Leaf(10);
+  l.setRainbow();
+  assert.equal(l.isRainbow(), true);
+  assert.equal(l.isAlive(), true);
+  assert.equal(l.color(), 8);
+});
+
+test("Leaf: get_life_ratio and get_birth_ratio expose the render fractions", () => {
+  const l = new Leaf(10);
+  assert.equal(l.get_life_ratio(), 1);
+  assert.equal(l.get_birth_ratio(), 1);
+  l.remove();
+  assert.ok(l.get_life_ratio() < 1);
+  l.playBirth();
+  assert.ok(l.get_birth_ratio() < 1);
+});
+
 test("Leaf: serialize -> restore round-trips color, life, and color cycle", () => {
   const a = new Leaf(10);
   a.remove();

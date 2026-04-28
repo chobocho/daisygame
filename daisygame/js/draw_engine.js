@@ -802,6 +802,30 @@ class DrawEngine {
         // Petals first so they tuck behind the disc.
         for (let i = 0; i < 6; i++) {
             const leaf = flower.leaf[i];
+            if (leaf.color() === 0)
+                continue;
+            const angleDeg = 60 * i;
+            const radians = (angleDeg * Math.PI) / 180;
+            const distance = flower.radius;
+            const px = flower.x + Math.cos(radians) * distance;
+            const py = flower.y + Math.sin(radians) * distance;
+            if (leaf.isRainbow()) {
+                // Rainbow leaves use a grow + fade death animation, so we drive
+                // length / width / alpha from life and birth fractions directly.
+                const lifeFrac = leaf.get_life_ratio();
+                const birthFrac = leaf.get_birth_ratio();
+                const dying = !leaf.isAlive() && lifeFrac > 0;
+                const scale = dying
+                    ? birthFrac * (1 + (1 - lifeFrac) * 0.7)
+                    : lifeFrac * birthFrac;
+                const alpha = dying ? lifeFrac : 1;
+                if (scale <= 0 || alpha <= 0)
+                    continue;
+                const length = small_radius * 3.4 * scale;
+                const width = small_radius * 1.9 * scale;
+                this._drawRainbowPetal(px, py, radians, length, width, alpha);
+                continue;
+            }
             const leafSize = leaf.size();
             if (leafSize === 0)
                 continue;
@@ -813,11 +837,6 @@ class DrawEngine {
             // under the (now smaller) yellow disc — that's how a real daisy reads.
             const length = small_radius * 3.4 * lifeRatio;
             const width = small_radius * 1.9 * lifeRatio;
-            const angleDeg = 60 * i;
-            const radians = (angleDeg * Math.PI) / 180;
-            const distance = flower.radius;
-            const px = flower.x + Math.cos(radians) * distance;
-            const py = flower.y + Math.sin(radians) * distance;
             this._drawPetal(px, py, radians, length, width, palette);
         }
         // Smaller yellow daisy disc on top of the petal inner tips.
@@ -847,6 +866,41 @@ class DrawEngine {
         bufCtx.beginPath();
         bufCtx.ellipse(halfL * 0.45, -halfW * 0.35, halfL * 0.22, halfW * 0.22, 0, 0, Math.PI * 2);
         bufCtx.fillStyle = "rgba(255,255,255,0.35)";
+        bufCtx.fill();
+        bufCtx.restore();
+    }
+    // Rainbow petal: same teardrop path as _drawPetal but filled with a
+    // multi-stop spectrum gradient. Caller controls overall alpha for the
+    // grow-and-fade death animation.
+    _drawRainbowPetal(cx, cy, angleRad, length, width, alpha) {
+        bufCtx.save();
+        bufCtx.globalAlpha = Math.max(0, Math.min(1, alpha));
+        bufCtx.translate(cx, cy);
+        bufCtx.rotate(angleRad);
+        const halfL = length / 2;
+        const halfW = width / 2;
+        const grad = bufCtx.createLinearGradient(-halfL, 0, halfL, 0);
+        grad.addColorStop(0.00, "#FF6B6B"); // red
+        grad.addColorStop(0.20, "#FFA45C"); // orange
+        grad.addColorStop(0.38, "#FFD23F"); // yellow
+        grad.addColorStop(0.55, "#7DD3A0"); // green
+        grad.addColorStop(0.72, "#5BD2F2"); // cyan
+        grad.addColorStop(0.86, "#5B7BF2"); // blue
+        grad.addColorStop(1.00, "#C18BF7"); // purple
+        bufCtx.beginPath();
+        bufCtx.moveTo(-halfL, 0);
+        bufCtx.bezierCurveTo(-halfL * 0.4, -halfW * 1.05, halfL * 0.55, -halfW, halfL, 0);
+        bufCtx.bezierCurveTo(halfL * 0.55, halfW, -halfL * 0.4, halfW * 1.05, -halfL, 0);
+        bufCtx.closePath();
+        bufCtx.fillStyle = grad;
+        bufCtx.fill();
+        bufCtx.lineWidth = 1;
+        bufCtx.strokeStyle = "rgba(120, 60, 130, 0.45)";
+        bufCtx.stroke();
+        // Sparkle highlight near the outer tip.
+        bufCtx.beginPath();
+        bufCtx.ellipse(halfL * 0.45, -halfW * 0.35, halfL * 0.22, halfW * 0.22, 0, 0, Math.PI * 2);
+        bufCtx.fillStyle = "rgba(255, 255, 255, 0.55)";
         bufCtx.fill();
         bufCtx.restore();
     }

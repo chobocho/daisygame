@@ -43,6 +43,9 @@ interface LeafLike {
   size(): number;
   color(): number;
   isAlive(): boolean;
+  isRainbow(): boolean;
+  get_life_ratio(): number;
+  get_birth_ratio(): number;
 }
 
 interface FlowerLike {

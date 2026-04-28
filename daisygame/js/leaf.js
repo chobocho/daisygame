@@ -26,6 +26,28 @@ class Leaf {
         if (this._birth < this._birthMax) this._birth++;
     }
 
+    // Rainbow leaf: matches any color in checkCollision. Color 8 is reserved
+    // for this and never appears in the regular _colorTable.
+    setRainbow() {
+        this._color = 8;
+        this._life = this._origin_life;
+    }
+
+    isRainbow() {
+        return this._color === 8;
+    }
+
+    // Render-side helpers — exposed so the draw engine can play different
+    // animations for rainbow leaves (grow + fade) without re-deriving from
+    // size().
+    get_life_ratio() {
+        return this._life / this._origin_life;
+    }
+
+    get_birth_ratio() {
+        return this._birth / this._birthMax;
+    }
+
     reset() {
         this._colorIdx = (this._colorIdx + 1) % this._colorTable.length;
         this._color = this._colorTable[this._colorIdx];
