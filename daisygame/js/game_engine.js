@@ -63,6 +63,15 @@ class GameEngine{
     this._game.init();
   }
 
+  gotoLevelSelect() {
+    // Bail from a paused puzzle round back to the 100-level grid.
+    if (this._game.needToSaveScore()) {
+      this._scoreDB.setScore(this._game.highScore());
+    }
+    this._scoreDB.clearResume();
+    this._game.exitToLevelSelect();
+  }
+
   retryPuzzleLevel() {
     const lvl = this._game.puzzleLevel();
     if (lvl > 0) {

@@ -363,6 +363,21 @@ class DaisyGame {
         this.playPuzzleLevel(level);
     }
 
+    exitToLevelSelect() {
+        // Bail out of an in-progress (or paused) puzzle round and return to
+        // the level grid. Score and timer reset; mode stays MODE_PUZZLE so
+        // the grid renders. Caller (GameEngine.gotoLevelSelect) clears the
+        // resume slot since the round is abandoned.
+        this.init();
+        this._mode = this.MODE_PUZZLE;
+        if (this._puzzleProgress) {
+            this._puzzleLevel = this._puzzleProgress.unlocked();
+        } else {
+            this._puzzleLevel = 1;
+        }
+        this._state = this.LEVEL_SELECT_STATE;
+    }
+
     mode() {
         return this._mode;
     }

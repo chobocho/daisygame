@@ -57,6 +57,11 @@ function processKeyEvent(code) {
     case NEXT_LEVEL_KEY:
       gameEngine.nextPuzzleLevel();
       break;
+    case LEVEL_SELECT_KEY:
+      if (daisyGame.isPauseState()) {
+        gameEngine.gotoLevelSelect();
+      }
+      break;
     case KEY_0:
       gameEngine.press(0);
       break;

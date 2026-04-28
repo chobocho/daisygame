@@ -105,8 +105,17 @@ class DrawEngine {
         }
         else if (this.game.isPauseState()) {
             this._drawWordmark("Paused");
-            this._drawPlayButton(200, 140, 100, 28, "Resume");
-            this._drawMenuButton(200, 210, 85, 22);
+            if (this.game.mode() === 1) {
+                // Puzzle: three options — Resume / Level Select / Main Menu.
+                this._drawPlayButton(200, 120, 100, 24, "Resume");
+                this._drawModeButton(200, 180, 95, 22, "Level Select", "\u{1F9E9}", "#A6BFF7", "#5C7DD6"); // 🧩
+                this._drawMenuButton(200, 240, 85, 22);
+            }
+            else {
+                // Arcade / Endless: existing two-button layout.
+                this._drawPlayButton(200, 140, 100, 28, "Resume");
+                this._drawMenuButton(200, 210, 85, 22);
+            }
             this._drawHighScore();
         }
         else if (this.game.isGameOverState()) {
@@ -599,19 +608,29 @@ class DrawEngine {
             }
         }
         else if (this.game.isPauseState()) {
-            // Resume — primary button at (200, 140) ± (100, 28). Hit box is a touch
-            // generous to match the previous behavior.
+            const isPuzzle = this.game.mode() === 1;
+            const resumeY = isPuzzle ? 120 : 140;
+            const resumeHalfH = isPuzzle ? 28 : 32;
             const rbx1 = gStartX + 100 * gScale;
             const rbx2 = gStartX + 300 * gScale;
-            const rby1 = (140 - 32) * gScale;
-            const rby2 = (140 + 32) * gScale;
+            const rby1 = (resumeY - resumeHalfH) * gScale;
+            const rby2 = (resumeY + resumeHalfH) * gScale;
             if (x > rbx1 && x < rbx2 && y > rby1 && y < rby2)
                 return S_KEY;
-            // Main Menu — secondary button at (200, 210) ± (85, 22).
+            if (isPuzzle) {
+                // Level Select at (200, 180) ± (95, 22)
+                const lbx1 = gStartX + (200 - 95) * gScale;
+                const lbx2 = gStartX + (200 + 95) * gScale;
+                const lby1 = (180 - 22) * gScale;
+                const lby2 = (180 + 22) * gScale;
+                if (x > lbx1 && x < lbx2 && y > lby1 && y < lby2)
+                    return LEVEL_SELECT_KEY;
+            }
+            const menuY = isPuzzle ? 240 : 210;
             const mbx1 = gStartX + (200 - 85) * gScale;
             const mbx2 = gStartX + (200 + 85) * gScale;
-            const mby1 = (210 - 22) * gScale;
-            const mby2 = (210 + 22) * gScale;
+            const mby1 = (menuY - 22) * gScale;
+            const mby2 = (menuY + 22) * gScale;
             if (x > mbx1 && x < mbx2 && y > mby1 && y < mby2)
                 return MENU_KEY;
         }

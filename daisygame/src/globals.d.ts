@@ -24,6 +24,7 @@ declare const MENU_KEY: number;
 declare const NAV_PREV_KEY: number;
 declare const NAV_NEXT_KEY: number;
 declare const NEXT_LEVEL_KEY: number;
+declare const LEVEL_SELECT_KEY: number;
 
 declare let gStartX: number;
 declare let gBlockSize: number;

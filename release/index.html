@@ -183,6 +183,7 @@ const MENU_KEY = 204;
 const NAV_PREV_KEY = 205;
 const NAV_NEXT_KEY = 206;
 const NEXT_LEVEL_KEY = 207;
+const LEVEL_SELECT_KEY = 210;
 
 let gStartX = 0;
 let gBlockSize = 60;
@@ -1085,6 +1086,21 @@ class DaisyGame {
         this.playPuzzleLevel(level);
     }
 
+    exitToLevelSelect() {
+        // Bail out of an in-progress (or paused) puzzle round and return to
+        // the level grid. Score and timer reset; mode stays MODE_PUZZLE so
+        // the grid renders. Caller (GameEngine.gotoLevelSelect) clears the
+        // resume slot since the round is abandoned.
+        this.init();
+        this._mode = this.MODE_PUZZLE;
+        if (this._puzzleProgress) {
+            this._puzzleLevel = this._puzzleProgress.unlocked();
+        } else {
+            this._puzzleLevel = 1;
+        }
+        this._state = this.LEVEL_SELECT_STATE;
+    }
+
     mode() {
         return this._mode;
     }
@@ -1378,6 +1394,15 @@ class GameEngine{
     this._game.init();
   }
 
+  gotoLevelSelect() {
+    // Bail from a paused puzzle round back to the 100-level grid.
+    if (this._game.needToSaveScore()) {
+      this._scoreDB.setScore(this._game.highScore());
+    }
+    this._scoreDB.clearResume();
+    this._game.exitToLevelSelect();
+  }
+
   retryPuzzleLevel() {
     const lvl = this._game.puzzleLevel();
     if (lvl > 0) {
@@ -1508,8 +1533,17 @@ class DrawEngine {
         }
         else if (this.game.isPauseState()) {
             this._drawWordmark("Paused");
-            this._drawPlayButton(200, 140, 100, 28, "Resume");
-            this._drawMenuButton(200, 210, 85, 22);
+            if (this.game.mode() === 1) {
+                // Puzzle: three options — Resume / Level Select / Main Menu.
+                this._drawPlayButton(200, 120, 100, 24, "Resume");
+                this._drawModeButton(200, 180, 95, 22, "Level Select", "\u{1F9E9}", "#A6BFF7", "#5C7DD6"); // 🧩
+                this._drawMenuButton(200, 240, 85, 22);
+            }
+            else {
+                // Arcade / Endless: existing two-button layout.
+                this._drawPlayButton(200, 140, 100, 28, "Resume");
+                this._drawMenuButton(200, 210, 85, 22);
+            }
             this._drawHighScore();
         }
         else if (this.game.isGameOverState()) {
@@ -2002,19 +2036,29 @@ class DrawEngine {
             }
         }
         else if (this.game.isPauseState()) {
-            // Resume — primary button at (200, 140) ± (100, 28). Hit box is a touch
-            // generous to match the previous behavior.
+            const isPuzzle = this.game.mode() === 1;
+            const resumeY = isPuzzle ? 120 : 140;
+            const resumeHalfH = isPuzzle ? 28 : 32;
             const rbx1 = gStartX + 100 * gScale;
             const rbx2 = gStartX + 300 * gScale;
-            const rby1 = (140 - 32) * gScale;
-            const rby2 = (140 + 32) * gScale;
+            const rby1 = (resumeY - resumeHalfH) * gScale;
+            const rby2 = (resumeY + resumeHalfH) * gScale;
             if (x > rbx1 && x < rbx2 && y > rby1 && y < rby2)
                 return S_KEY;
-            // Main Menu — secondary button at (200, 210) ± (85, 22).
+            if (isPuzzle) {
+                // Level Select at (200, 180) ± (95, 22)
+                const lbx1 = gStartX + (200 - 95) * gScale;
+                const lbx2 = gStartX + (200 + 95) * gScale;
+                const lby1 = (180 - 22) * gScale;
+                const lby2 = (180 + 22) * gScale;
+                if (x > lbx1 && x < lbx2 && y > lby1 && y < lby2)
+                    return LEVEL_SELECT_KEY;
+            }
+            const menuY = isPuzzle ? 240 : 210;
             const mbx1 = gStartX + (200 - 85) * gScale;
             const mbx2 = gStartX + (200 + 85) * gScale;
-            const mby1 = (210 - 22) * gScale;
-            const mby2 = (210 + 22) * gScale;
+            const mby1 = (menuY - 22) * gScale;
+            const mby2 = (menuY + 22) * gScale;
             if (x > mbx1 && x < mbx2 && y > mby1 && y < mby2)
                 return MENU_KEY;
         }
@@ -2565,6 +2609,11 @@ function processKeyEvent(code) {
       break;
     case NEXT_LEVEL_KEY:
       gameEngine.nextPuzzleLevel();
+      break;
+    case LEVEL_SELECT_KEY:
+      if (daisyGame.isPauseState()) {
+        gameEngine.gotoLevelSelect();
+      }
       break;
     case KEY_0:
       gameEngine.press(0);

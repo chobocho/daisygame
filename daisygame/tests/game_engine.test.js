@@ -74,3 +74,22 @@ test("GameEngine.start() (no arg) does not clear the resume snapshot", () => {
   eng.start(); // resume from pause
   assert.notEqual(db.getResume(), null, "resuming preserves the snapshot");
 });
+
+test("GameEngine.gotoLevelSelect: from puzzle PAUSE returns to LEVEL_SELECT and clears resume", () => {
+  _store.clear();
+  const db = new LocalDB();
+  const game = new DaisyGame(0, 0, 0);
+  game.init();
+  const eng = new GameEngine(game, db);
+
+  game.playPuzzleLevel(1);
+  game.increaseScore(40);
+  eng.pause();
+  assert.notEqual(db.getResume(), null);
+
+  eng.gotoLevelSelect();
+
+  assert.equal(game.isLevelSelectState(), true);
+  assert.equal(db.getResume(), null);
+  assert.equal(game.score(), 0);
+});

@@ -124,9 +124,8 @@ test("DaisyGame: turnFlower scores when a forced color match is set up", () => {
   const flowers = g.getFlowers();
 
   // _leafMap[0] includes [0, 13] -> flower 0 leaf 0 with flower 1 leaf 3.
-  // turn() does unshift(pop()), so leaf 5 ends up at index 0 after the call.
-  // Forcing flower 0 leaf 5 and flower 1 leaf 3 to the same alive color
-  // creates a deterministic match the moment we tap flower 0.
+  // Force CW so leaf 5 moves into slot 0 on turn (CCW would move slot 0 -> 5).
+  flowers[0].set_direction(1);
   flowers[0].leaf[5]._color = 5;
   flowers[0].leaf[5]._life = 15;
   flowers[1].leaf[3]._color = 5;
@@ -314,6 +313,25 @@ test("DaisyGame: selectAndPlayLevel works for any level up to the unlocked front
   g.selectAndPlayLevel(3);
   assert.equal(g.isPlayState(), true);
   assert.equal(g.puzzleLevel(), 3);
+});
+
+test("DaisyGame: exitToLevelSelect from PAUSE returns to LEVEL_SELECT", () => {
+  const g = fresh();
+  g.playPuzzleLevel(1);
+  g.pause();
+  assert.equal(g.isPauseState(), true);
+  g.exitToLevelSelect();
+  assert.equal(g.isLevelSelectState(), true);
+  assert.equal(g.mode(), MODE_PUZZLE);
+});
+
+test("DaisyGame: exitToLevelSelect resets score (round abandoned)", () => {
+  const g = fresh();
+  g.playPuzzleLevel(1);
+  g.increaseScore(120);
+  g.pause();
+  g.exitToLevelSelect();
+  assert.equal(g.score(), 0);
 });
 
 // ---------- mixed rotation directions ----------

@@ -26,6 +26,7 @@ const MENU_KEY = 204;
 const NAV_PREV_KEY = 205;
 const NAV_NEXT_KEY = 206;
 const NEXT_LEVEL_KEY = 207;
+const LEVEL_SELECT_KEY = 210;
 
 let gStartX = 0;
 let gBlockSize = 60;

@@ -654,7 +654,34 @@ Leaf 신규:
 - `selectAndPlayLevel(50)` → 잠금이면 LEVEL_SELECT 유지 + `puzzleLevel`은 50으로 안 바뀜
 - `puzzleProgress._unlocked = 7` 강제 후 `selectAndPlayLevel(3)` → frontier 미만 임의 레벨도 정상 시작 (재도전 시나리오)
 
-## 24. 후속 후보
+## 24. 퍼즐 PAUSE에서 Level Select로 가는 메뉴
+
+피드백: "puzzle 모드에서는 pause할 때, 레벨 선택 화면으로 가는 메뉴가 필요해."
+
+### 24.1 흐름
+
+PAUSE → "Level Select" 탭 → 현재 라운드 점수 폐기 + resume 슬롯 삭제 + 100-레벨 그리드로 복귀. 사용자가 다른 레벨을 고르거나 같은 레벨을 신선한 상태로 다시 시작 가능.
+
+### 24.2 변경
+
+- `js/values.js`, `src/globals.d.ts` — `LEVEL_SELECT_KEY = 210` 추가
+- `js/daisygame.js`:
+  - `exitToLevelSelect()` — `init()`로 score/board 리셋, mode 강제 `MODE_PUZZLE`, `_puzzleLevel`을 unlocked frontier로, state를 `LEVEL_SELECT_STATE`로
+- `js/game_engine.js`:
+  - `gotoLevelSelect()` — `needToSaveScore`면 setScore, `clearResume`, `_game.exitToLevelSelect()` 호출
+- `js/main.js` — `LEVEL_SELECT_KEY` 케이스를 `daisyGame.isPauseState()` 가드로 라우팅
+- `src/draw_engine.ts`:
+  - PAUSE 화면이 `mode === 1`(puzzle)이면 **3-버튼 레이아웃**: Resume(cy=120) / Level Select 🧩(cy=180) / Main Menu(cy=240). 일반 모드는 기존 2-버튼 그대로
+  - PAUSE 히트박스도 모드별 분기 — Resume Y / Menu Y가 puzzle이면 다른 위치, 가운데에 Level Select 박스 추가
+
+### 24.3 테스트 (125건, +3)
+
+- `DaisyGame.exitToLevelSelect`: PAUSE에서 호출 시 LEVEL_SELECT 진입 + mode = puzzle 유지
+- `DaisyGame.exitToLevelSelect`: 진행 중 누적된 score를 0으로 리셋(라운드 폐기 시멘틱)
+- `GameEngine.gotoLevelSelect`: PAUSE 중 호출 → LEVEL_SELECT 전이 + resume 슬롯 삭제 + score 0
+- 부수: 기존 "turnFlower scores when a forced color match" 테스트가 random direction 할당에 의존하던 flaky 케이스 → `flowers[0].set_direction(1)`로 결정론화
+
+## 25. 후속 후보
 
 - 남은 JS 파일들도 점진적으로 .ts로 이식 (현재는 ambient 선언으로 우회 중)
 - `flower.js` / `leaf.js` 인덱스 0–6 / 1–6 매핑을 자료구조로 분리해 가독성 정리
