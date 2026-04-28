@@ -408,11 +408,31 @@
 
 피드백: 두 방향 꽃을 한눈에 구분하기 어렵다 → 화살표 색을 방향별로 다르게.
 
-`draw_engine.ts` `_drawRotationArrow`:
+`draw_engine.ts`:
 - **CW**: 빨강 `#D6303A`
 - **CCW**: 파랑 `#1F6FE0`
 - 흰색 후광 stroke은 그대로 (노란 디스크 위 가독성)
 - 본체 굵기·호 형태 동일
+
+색 결정 로직은 정적 헬퍼로 추출해 테스트 가능하게:
+
+```ts
+static readonly ARROW_COLOR_CW = "#D6303A";
+static readonly ARROW_COLOR_CCW = "#1F6FE0";
+static arrowColorFor(direction: number): string {
+  return direction === -1 ? DrawEngine.ARROW_COLOR_CCW : DrawEngine.ARROW_COLOR_CW;
+}
+```
+
+### 17.1 테스트 (87건, +4)
+
+부트스트랩 `loadGame()`이 이제 `draw_engine.js`도 평가, `DrawEngine`을 노출 (클래스 본체에 DOM 접근이 없어 `new Function` 평가에 안전).
+
+신규 `draw_engine.test.js`:
+- CW(1) → `#D6303A` (= `ARROW_COLOR_CW`)
+- CCW(−1) → `#1F6FE0` (= `ARROW_COLOR_CCW`)
+- −1 외의 모든 입력(0, 2, NaN) → CW로 폴백
+- CW 색과 CCW 색이 서로 다름 (식별 가능 보장)
 
 ## 18. 후속 후보
 

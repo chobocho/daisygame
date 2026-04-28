@@ -63,6 +63,14 @@ class DrawEngine {
   private static readonly MODE_BTN_HALF_W = 110;
   private static readonly MODE_BTN_HALF_H = 24;
 
+  // Rotation arrow palette. Pulled out of _drawRotationArrow so unit tests
+  // can pin the color contract without exercising the canvas pipeline.
+  static readonly ARROW_COLOR_CW = "#D6303A";
+  static readonly ARROW_COLOR_CCW = "#1F6FE0";
+  static arrowColorFor(direction: number): string {
+    return direction === -1 ? DrawEngine.ARROW_COLOR_CCW : DrawEngine.ARROW_COLOR_CW;
+  }
+
   constructor(game: DaisyGameLike, images: ImageLoaderLike) {
     this.game = game;
     this._image_res = images.images;
@@ -730,7 +738,7 @@ class DrawEngine {
 
     // Color-coded arrow on top — red for CW, blue for CCW so the player can
     // tell the two flower types apart at a glance.
-    const arrowColor = direction === -1 ? "#1F6FE0" : "#D6303A";
+    const arrowColor = DrawEngine.arrowColorFor(direction);
     bufCtx.strokeStyle = arrowColor;
     bufCtx.fillStyle = arrowColor;
     bufCtx.lineWidth = Math.max(1.4, discRadius * 0.09);

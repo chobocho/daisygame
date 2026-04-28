@@ -1,5 +1,8 @@
 "use strict";
 class DrawEngine {
+    static arrowColorFor(direction) {
+        return direction === -1 ? DrawEngine.ARROW_COLOR_CCW : DrawEngine.ARROW_COLOR_CW;
+    }
     constructor(game, images) {
         this._frame = 0;
         this._bee = {
@@ -585,7 +588,7 @@ class DrawEngine {
         bufCtx.fill();
         // Color-coded arrow on top — red for CW, blue for CCW so the player can
         // tell the two flower types apart at a glance.
-        const arrowColor = direction === -1 ? "#1F6FE0" : "#D6303A";
+        const arrowColor = DrawEngine.arrowColorFor(direction);
         bufCtx.strokeStyle = arrowColor;
         bufCtx.fillStyle = arrowColor;
         bufCtx.lineWidth = Math.max(1.4, discRadius * 0.09);
@@ -804,3 +807,7 @@ DrawEngine.MODE_BUTTONS = [
 ];
 DrawEngine.MODE_BTN_HALF_W = 110;
 DrawEngine.MODE_BTN_HALF_H = 24;
+// Rotation arrow palette. Pulled out of _drawRotationArrow so unit tests
+// can pin the color contract without exercising the canvas pipeline.
+DrawEngine.ARROW_COLOR_CW = "#D6303A";
+DrawEngine.ARROW_COLOR_CCW = "#1F6FE0";
