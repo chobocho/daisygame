@@ -354,6 +354,15 @@ class DaisyGame {
         }
     }
 
+    selectAndPlayLevel(level) {
+        // Direct grid tap. Unlocked levels start immediately; locked taps
+        // are silently ignored so a misclick on a future level does nothing.
+        if (this._state !== this.LEVEL_SELECT_STATE) return;
+        if (this._puzzleProgress && !this._puzzleProgress.isUnlocked(level)) return;
+        this._puzzleLevel = level;
+        this.playPuzzleLevel(level);
+    }
+
     mode() {
         return this._mode;
     }

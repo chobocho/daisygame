@@ -618,7 +618,43 @@ Leaf 신규:
 
 - 단일 매치가 정확히 5점을 부여하는지 결정론적 케이스 (모든 잎 제거 후 한 쌍만 강제 배치, CW 회전 후 `_leafMap[0][0]`으로 매치)
 
-## 23. 후속 후보
+## 23. 퍼즐 모드: 100 레벨 그리드 (잠금 / 별 / 베스트 한 화면)
+
+피드백: "퍼즐 모드를 들어가면 1-100 단계 스테이지가 보이고, 아직 열리지 않은 레벨은 자물쇠로 잠겨있고, 해결한 레벨은 최고 점수와 3단계 별표 점수로 표시되어야 하고, 터치로 해결한 판을 다시 도전해서 별을 업데이트할 수 있어야 해."
+
+### 23.1 UI 재설계 (`draw_engine.ts`)
+
+이전엔 한 번에 한 레벨만 보여주는 패널 + ◀ Play ▶ 화살표였음. 100개를 한눈에 못 보고, 베스트 갱신을 위해 매번 화살표로 이동해야 했음.
+
+신규: **10×10 그리드** (cell 36×40, 단일 페이지)
+- 그리드 영역: y=100..500 (400px), x=20..380 (360px)
+- 각 cell:
+  - 잠긴 레벨 → 회색 배경 + 🔒
+  - 1★ 이상 → 크림색 배경(`#FFEFA8`)
+  - 3★ → 황금 배경(`#FFD56B`)
+  - 0★ unlocked → 흰 배경
+  - 셀 내용: 상단 레벨 번호(11px bold), 중앙 별 3개(반경 2.4px), 하단 베스트 점수(9px, > 0일 때만)
+  - 현재 선택 레벨엔 빨간 ring 강조
+- y=540: Main Menu 버튼
+
+기존 `_drawLevelSelectPanel` (정보 패널 / 별 / 화살표 / Play 버튼 / 락 오버레이) 통째 제거.
+
+### 23.2 터치 라우팅
+
+- DrawEngine `_hitGridCell(x, y)`: 캔버스 좌표를 그리드 셀로 역변환, 1..100 레벨 번호 반환
+- `_hitLevelSelect`가 그리드 hit → `LEVEL_TAP_BASE(1000) + level` 합성 코드 반환
+- `main.js processKeyEvent`가 1001..1100 범위면 `daisyGame.selectAndPlayLevel(level)` 호출
+- `DaisyGame.selectAndPlayLevel(level)`: LEVEL_SELECT 상태 + unlocked 레벨일 때만 `_puzzleLevel` 갱신 + `playPuzzleLevel` 호출. 잠긴 레벨 탭은 silent no-op
+
+키보드 ←/→ 는 기존 `levelSelectPrev/Next` 그대로(현재 선택 레벨에 빨간 ring), Enter는 `levelSelectPlay`로 선택 레벨 시작 — 그리드와 병행.
+
+### 23.3 테스트 (122건, +3)
+
+- `selectAndPlayLevel(1)` → unlocked 레벨이면 PLAY 진입 + `puzzleLevel === 1`
+- `selectAndPlayLevel(50)` → 잠금이면 LEVEL_SELECT 유지 + `puzzleLevel`은 50으로 안 바뀜
+- `puzzleProgress._unlocked = 7` 강제 후 `selectAndPlayLevel(3)` → frontier 미만 임의 레벨도 정상 시작 (재도전 시나리오)
+
+## 24. 후속 후보
 
 - 남은 JS 파일들도 점진적으로 .ts로 이식 (현재는 ambient 선언으로 우회 중)
 - `flower.js` / `leaf.js` 인덱스 0–6 / 1–6 매핑을 자료구조로 분리해 가독성 정리

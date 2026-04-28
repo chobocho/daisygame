@@ -291,6 +291,31 @@ test("DaisyGame: levelSelectPlay does nothing for a locked level", () => {
   assert.equal(g.isLevelSelectState(), true, "must remain in LEVEL_SELECT");
 });
 
+test("DaisyGame: selectAndPlayLevel jumps to an unlocked level and starts it", () => {
+  const g = fresh();
+  g.start(MODE_PUZZLE);
+  g.selectAndPlayLevel(1);
+  assert.equal(g.isPlayState(), true);
+  assert.equal(g.puzzleLevel(), 1);
+});
+
+test("DaisyGame: selectAndPlayLevel ignores locked levels", () => {
+  const g = fresh();
+  g.start(MODE_PUZZLE);
+  g.selectAndPlayLevel(50); // not unlocked
+  assert.equal(g.isLevelSelectState(), true);
+  assert.notEqual(g.puzzleLevel(), 50);
+});
+
+test("DaisyGame: selectAndPlayLevel works for any level up to the unlocked frontier", () => {
+  const g = fresh();
+  g.start(MODE_PUZZLE);
+  g.puzzleProgress()._unlocked = 7;
+  g.selectAndPlayLevel(3);
+  assert.equal(g.isPlayState(), true);
+  assert.equal(g.puzzleLevel(), 3);
+});
+
 // ---------- mixed rotation directions ----------
 
 test("DaisyGame: _init_flower assigns at least 2 CW and 2 CCW directions", () => {

@@ -7,6 +7,11 @@ function OnDraw() {
 
 function processKeyEvent(code) {
   printf("[Main] processKeyEvent: ", code);
+  // Level-grid taps are encoded as 1000 + level (1..100). Decode and play.
+  if (code > 1000 && code <= 1100) {
+    daisyGame.selectAndPlayLevel(code - 1000);
+    return;
+  }
   switch (code) {
     case P_KEY:
       printf("[Main] processKeyEvent: ", "Pause");

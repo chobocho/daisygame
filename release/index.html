@@ -1076,6 +1076,15 @@ class DaisyGame {
         }
     }
 
+    selectAndPlayLevel(level) {
+        // Direct grid tap. Unlocked levels start immediately; locked taps
+        // are silently ignored so a misclick on a future level does nothing.
+        if (this._state !== this.LEVEL_SELECT_STATE) return;
+        if (this._puzzleProgress && !this._puzzleProgress.isUnlocked(level)) return;
+        this._puzzleLevel = level;
+        this.playPuzzleLevel(level);
+    }
+
     mode() {
         return this._mode;
     }
@@ -1524,90 +1533,80 @@ class DrawEngine {
                 this._drawPuzzleHud();
         }
     }
-    // ---------- Level select panel ----------
     _drawLevelSelectPanel() {
-        const lvl = this.game.puzzleLevel() || 1;
-        const cfg = Puzzle.levelConfig(lvl);
+        this._drawLevelGrid();
+        // Main Menu sits below the grid.
+        this._drawMenuButton(200, 540, 85, 22);
+    }
+    _drawLevelGrid() {
         const prog = this.game.puzzleProgress();
-        const best = prog ? prog.bestScore(lvl) : 0;
-        const stars = prog ? prog.stars(lvl) : 0;
         const unlocked = prog ? prog.unlocked() : 1;
-        // Info panel.
+        const selected = this.game.puzzleLevel();
+        for (let lv = 1; lv <= Puzzle.MAX_LEVEL; lv++) {
+            const idx = lv - 1;
+            const col = idx % DrawEngine.GRID_COLS;
+            const row = Math.floor(idx / DrawEngine.GRID_COLS);
+            const cx = DrawEngine.GRID_X + col * DrawEngine.GRID_CELL_W + DrawEngine.GRID_CELL_W / 2;
+            const cy = DrawEngine.GRID_Y + row * DrawEngine.GRID_CELL_H + DrawEngine.GRID_CELL_H / 2;
+            this._drawLevelCell(cx, cy, lv, prog, lv <= unlocked, lv === selected);
+        }
+    }
+    _drawLevelCell(cx, cy, level, prog, isUnlocked, isSelected) {
+        const w = DrawEngine.GRID_CELL_W - 3;
+        const h = DrawEngine.GRID_CELL_H - 3;
+        const stars = prog ? prog.stars(level) : 0;
+        const best = prog ? prog.bestScore(level) : 0;
         bufCtx.save();
-        const px = 50;
-        const py = 110;
-        const pw = 300;
-        const ph = 130;
-        bufCtx.fillStyle = "rgba(255, 247, 230, 0.92)";
-        this._roundRectPath(px, py, pw, ph, 14);
+        // Background tinted by progress.
+        if (!isUnlocked) {
+            bufCtx.fillStyle = "rgba(150,150,150,0.55)";
+        }
+        else if (stars >= 3) {
+            bufCtx.fillStyle = "#FFD56B";
+        }
+        else if (stars >= 1) {
+            bufCtx.fillStyle = "#FFEFA8";
+        }
+        else {
+            bufCtx.fillStyle = "rgba(255,255,255,0.92)";
+        }
+        this._roundRectPath(cx - w / 2, cy - h / 2, w, h, 5);
         bufCtx.fill();
-        bufCtx.lineWidth = 2;
-        bufCtx.strokeStyle = "#a35a1d";
+        // Border (selected gets a red ring matching the CW arrow accent).
+        if (isSelected) {
+            bufCtx.lineWidth = 2.2;
+            bufCtx.strokeStyle = "#D6303A";
+        }
+        else {
+            bufCtx.lineWidth = 1;
+            bufCtx.strokeStyle = "rgba(120,70,0,0.5)";
+        }
         bufCtx.stroke();
+        if (!isUnlocked) {
+            bufCtx.font = "16px " + DrawEngine.EMOJI_FONT;
+            bufCtx.textAlign = "center";
+            bufCtx.textBaseline = "middle";
+            bufCtx.fillStyle = "#000";
+            bufCtx.fillText("\u{1F512}", cx, cy);
+            bufCtx.restore();
+            return;
+        }
+        // Level number on top.
+        bufCtx.font = "bold 11px " + DrawEngine.UI_FONT;
         bufCtx.textAlign = "center";
         bufCtx.textBaseline = "middle";
         bufCtx.fillStyle = "#3a2a18";
-        bufCtx.font = "bold 30px " + DrawEngine.UI_FONT;
-        bufCtx.fillText("Level " + cfg.level, 200, py + 28);
-        bufCtx.font = "16px " + DrawEngine.UI_FONT;
-        bufCtx.fillText("Target " + cfg.target + "  ·  Time " + cfg.timeSeconds + "s", 200, py + 60);
-        bufCtx.fillText("Flowers " + cfg.flowers + "  ·  Colors " + cfg.colors, 200, py + 80);
-        bufCtx.fillStyle = "#7a3010";
-        bufCtx.font = "bold 16px " + DrawEngine.UI_FONT;
-        bufCtx.fillText("Best  " + best, 200, py + 105);
-        bufCtx.restore();
-        // Stars.
-        this._drawStars(200, 250, stars, 14);
-        // Prev / Next arrows + Play button.
-        const prevEnabled = lvl > 1;
-        const nextEnabled = lvl < Math.min(Puzzle.MAX_LEVEL, unlocked);
-        const playEnabled = !!prog ? prog.isUnlocked(lvl) : true;
-        this._drawArrowButton(70, 305, "<", prevEnabled);
-        this._drawArrowButton(330, 305, ">", nextEnabled);
-        this._drawPlayButton(200, 305, 70, 24, "Play");
-        if (!playEnabled) {
-            // Dim overlay for locked level.
-            bufCtx.save();
-            bufCtx.fillStyle = "rgba(120,120,120,0.55)";
-            this._roundRectPath(130, 281, 140, 48, 18);
-            bufCtx.fill();
-            bufCtx.font = "20px " + DrawEngine.EMOJI_FONT;
-            bufCtx.textAlign = "center";
-            bufCtx.textBaseline = "middle";
-            bufCtx.fillStyle = "#FFF";
-            bufCtx.fillText("\u{1F512}", 200, 305); // 🔒
-            bufCtx.restore();
+        bufCtx.fillText(String(level), cx, cy - 11);
+        // Three small stars in the middle.
+        for (let i = 0; i < 3; i++) {
+            this._drawStar(cx - 7 + i * 7, cy + 1, 2.4, i < stars);
         }
-        // Main Menu button at the bottom.
-        this._drawMenuButton(200, 385, 85, 22);
-    }
-    _drawArrowButton(cx, cy, glyph, enabled) {
-        bufCtx.save();
-        bufCtx.fillStyle = enabled ? "rgba(0,0,0,0.18)" : "rgba(0,0,0,0.10)";
-        bufCtx.beginPath();
-        bufCtx.arc(cx + 1.5, cy + 2.5, 24, 0, Math.PI * 2);
-        bufCtx.fill();
-        const grad = bufCtx.createRadialGradient(cx - 6, cy - 8, 4, cx, cy, 24);
-        if (enabled) {
-            grad.addColorStop(0, "#FFFCE4");
-            grad.addColorStop(1, "#F4C56F");
+        // Best score on bottom (only after the player has scored at least once).
+        if (best > 0) {
+            bufCtx.font = "9px " + DrawEngine.UI_FONT;
+            bufCtx.fillStyle = "#7a3010";
+            bufCtx.fillText(String(best), cx, cy + h / 2 - 6);
         }
-        else {
-            grad.addColorStop(0, "#E0E0E0");
-            grad.addColorStop(1, "#9A9A9A");
-        }
-        bufCtx.fillStyle = grad;
-        bufCtx.beginPath();
-        bufCtx.arc(cx, cy, 24, 0, Math.PI * 2);
-        bufCtx.fill();
-        bufCtx.lineWidth = 2;
-        bufCtx.strokeStyle = enabled ? "#a35a1d" : "#666";
-        bufCtx.stroke();
-        bufCtx.font = "bold 24px " + DrawEngine.UI_FONT;
-        bufCtx.textAlign = "center";
-        bufCtx.textBaseline = "middle";
-        bufCtx.fillStyle = enabled ? "#5b2f0a" : "#444";
-        bufCtx.fillText(glyph, cx, cy + 1);
         bufCtx.restore();
     }
     _drawStars(cx, cy, filled, size) {
@@ -2043,33 +2042,34 @@ class DrawEngine {
         return 0;
     }
     _hitLevelSelect(x, y) {
-        // Prev arrow at (70, 305) r=24
-        const px = gStartX + 70 * gScale;
-        const py = 305 * gScale;
-        const r = 24 * gScale;
-        if ((x - px) ** 2 + (y - py) ** 2 <= r ** 2)
-            return NAV_PREV_KEY;
-        // Next arrow at (330, 305) r=24
-        const nx = gStartX + 330 * gScale;
-        if ((x - nx) ** 2 + (y - py) ** 2 <= r ** 2)
-            return NAV_NEXT_KEY;
-        // Play button at (200, 305). Visual halfW=70 (130..270), but the hit
-        // area spans from just past Prev (95) to just before Next (305) so the
-        // gaps don't silently absorb taps.
-        const pbx1 = gStartX + 95 * gScale;
-        const pbx2 = gStartX + 305 * gScale;
-        const pby1 = (305 - 24) * gScale;
-        const pby2 = (305 + 24) * gScale;
-        if (x > pbx1 && x < pbx2 && y > pby1 && y < pby2)
-            return S_KEY;
-        // Main Menu at (200, 385) halfW=85 halfH=22
+        // Grid cell hit: emit a synthetic code in the 1001..1100 range encoding
+        // the tapped level. main.js routes that to selectAndPlayLevel(level).
+        const tapped = this._hitGridCell(x, y);
+        if (tapped > 0)
+            return DrawEngine.LEVEL_TAP_BASE + tapped;
+        // Main Menu at (200, 540) halfW=85 halfH=22
         const mbx1 = gStartX + (200 - 85) * gScale;
         const mbx2 = gStartX + (200 + 85) * gScale;
-        const mby1 = (385 - 22) * gScale;
-        const mby2 = (385 + 22) * gScale;
+        const mby1 = (540 - 22) * gScale;
+        const mby2 = (540 + 22) * gScale;
         if (x > mbx1 && x < mbx2 && y > mby1 && y < mby2)
             return MENU_KEY;
         return 0;
+    }
+    // Locate which grid cell contains the (canvas-coord) point. Returns the
+    // 1-based level number, or 0 if the click is outside the grid.
+    _hitGridCell(x, y) {
+        const localX = (x - gStartX) / gScale - DrawEngine.GRID_X;
+        const localY = y / gScale - DrawEngine.GRID_Y;
+        if (localX < 0 || localY < 0)
+            return 0;
+        const col = Math.floor(localX / DrawEngine.GRID_CELL_W);
+        const row = Math.floor(localY / DrawEngine.GRID_CELL_H);
+        if (col < 0 || col >= DrawEngine.GRID_COLS)
+            return 0;
+        if (row < 0 || row >= DrawEngine.GRID_ROWS)
+            return 0;
+        return row * DrawEngine.GRID_COLS + col + 1;
     }
     _hitPuzzleGameOver(x, y) {
         const lvl = this.game.puzzleLevel();
@@ -2495,6 +2495,15 @@ DrawEngine.MODE_BTN_HALF_H = 24;
 // can pin the color contract without exercising the canvas pipeline.
 DrawEngine.ARROW_COLOR_CW = "#D6303A";
 DrawEngine.ARROW_COLOR_CCW = "#1F6FE0";
+// ---------- Level select grid (10 × 10) ----------
+// Grid layout in logical coords (400 × 600 buffer).
+DrawEngine.GRID_X = 20;
+DrawEngine.GRID_Y = 100;
+DrawEngine.GRID_COLS = 10;
+DrawEngine.GRID_ROWS = 10;
+DrawEngine.GRID_CELL_W = 36;
+DrawEngine.GRID_CELL_H = 40;
+DrawEngine.LEVEL_TAP_BASE = 1000;
 
 </script>
 <script>
@@ -2507,6 +2516,11 @@ function OnDraw() {
 
 function processKeyEvent(code) {
   printf("[Main] processKeyEvent: ", code);
+  // Level-grid taps are encoded as 1000 + level (1..100). Decode and play.
+  if (code > 1000 && code <= 1100) {
+    daisyGame.selectAndPlayLevel(code - 1000);
+    return;
+  }
   switch (code) {
     case P_KEY:
       printf("[Main] processKeyEvent: ", "Pause");
