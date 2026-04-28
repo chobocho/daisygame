@@ -407,4 +407,43 @@ class DaisyGame {
     needToSaveScore() {
         return this._score.needToSave();
     }
+
+    serialize() {
+        return {
+            v: 1,
+            mode: this._mode,
+            tick: this._tick,
+            timerTicks: this._timerTicks,
+            addLeafIndex: this._addLeafIndex,
+            addLeafTable: this._addLeafTable.slice(),
+            score: this._score.serialize(),
+            flowers: this._flowerArr.map(f => f.serialize()),
+        };
+    }
+
+    restore(d) {
+        if (!d || typeof d !== 'object') return false;
+        if (d.v !== 1) return false;
+        if (typeof d.mode !== 'number') return false;
+        if (!Array.isArray(d.flowers) || d.flowers.length !== 7) return false;
+
+        // Apply each piece defensively; if any inner restore is shaped wrong
+        // we still want the game to reach a usable PAUSE_STATE rather than
+        // half-applied chaos. So we apply, then enforce invariants.
+        this._mode = d.mode;
+        this._tick = (typeof d.tick === 'number') ? d.tick : 0;
+        this._timerTicks = (typeof d.timerTicks === 'number') ? d.timerTicks : 0;
+        this._addLeafIndex = (typeof d.addLeafIndex === 'number') ? d.addLeafIndex : 0;
+        if (Array.isArray(d.addLeafTable) && d.addLeafTable.length > 0) {
+            this._addLeafTable = d.addLeafTable.slice();
+        }
+        if (d.score) this._score.restore(d.score);
+        for (let i = 0; i < 7; i++) {
+            this._flowerArr[i].restore(d.flowers[i]);
+            this._flowerArr[i].set_index(i);
+        }
+        // Always come back paused so the player explicitly resumes.
+        this._state = this.PAUSE_STATE;
+        return true;
+    }
 }

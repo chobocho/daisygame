@@ -16,6 +16,9 @@ class GameEngine{
           printf("[GameEngine]", "SaveScore");
           this._scoreDB.setScore(this._game.highScore());
        }
+       // The board is finished — drop any resume snapshot so the next launch
+       // starts fresh on the mode-select screen.
+       this._scoreDB.clearResume();
     }
   }
 
@@ -26,10 +29,17 @@ class GameEngine{
         printf("[GameEngine]", "SaveScore");
         this._scoreDB.setScore(this._game.highScore());
       }
+      this._scoreDB.setResume(this._game.serialize());
     }
   }
 
   start(mode) {
+    // Picking a mode on idle / game-over is a fresh start — discard any
+    // pending resume snapshot. Resuming from pause omits `mode`, so the
+    // snapshot is preserved until the next pause overwrites it.
+    if (mode !== undefined) {
+      this._scoreDB.clearResume();
+    }
     this._game.start(mode);
   }
 

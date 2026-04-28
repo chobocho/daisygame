@@ -195,6 +195,60 @@ test("DaisyGame: endless mode does refill cleared flowers", () => {
   assert.ok(flowers[0].leaf_count() > 0, "endless must refill an empty flower");
 });
 
+// ---------- serialize / restore (resume) ----------
+
+test("DaisyGame: serialize -> restore round-trips score, mode, timer, flowers", () => {
+  const a = fresh();
+  a.start(MODE_ARCADE);
+  a._timerTicks = 1500;
+  a.increaseScore(77);
+
+  const snapshot = a.serialize();
+  assert.equal(snapshot.v, 1, "snapshot has schema version");
+
+  const b = new DaisyGame(0, 0, 0);
+  b.init();
+  assert.equal(b.restore(snapshot), true);
+
+  assert.equal(b.mode(), MODE_ARCADE);
+  assert.equal(b._timerTicks, 1500);
+  assert.equal(b.score(), 77);
+  assert.equal(b.isPauseState(), true, "restored game enters PAUSE");
+  for (let i = 0; i < 7; i++) {
+    const af = a.getFlowers()[i];
+    const bf = b.getFlowers()[i];
+    for (let j = 0; j < 6; j++) {
+      assert.equal(bf.leaf[j].color(), af.leaf[j].color());
+    }
+  }
+});
+
+test("DaisyGame.restore: graceful failure on null/undefined", () => {
+  const g = fresh();
+  const before = g.score();
+  assert.equal(g.restore(null), false);
+  assert.equal(g.restore(undefined), false);
+  assert.equal(g.score(), before);
+});
+
+test("DaisyGame.restore: graceful failure on schema version mismatch", () => {
+  const g = fresh();
+  assert.equal(g.restore({ v: 999 }), false);
+  assert.equal(g.isIdleState(), true);
+});
+
+test("DaisyGame.restore: graceful failure when flowers array is wrong length", () => {
+  const g = fresh();
+  const broken = { v: 1, mode: 0, flowers: [{}, {}, {}] };
+  assert.equal(g.restore(broken), false);
+});
+
+test("DaisyGame.restore: graceful failure when mode is non-numeric", () => {
+  const g = fresh();
+  const broken = { v: 1, mode: "arcade", flowers: new Array(7).fill({}) };
+  assert.equal(g.restore(broken), false);
+});
+
 test("DaisyGame: puzzle going non-playable transitions to GAME_OVER on next tap", () => {
   const g = fresh();
   g.start(MODE_PUZZLE);

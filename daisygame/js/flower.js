@@ -57,6 +57,38 @@ class Flower {
         this._leaf_count--;
     }
 
+    serialize() {
+        return {
+            index: this.index,
+            x: this.x,
+            y: this.y,
+            radius: this.radius,
+            smallRadius: this._small_radius,
+            leafCount: this._leaf_count,
+            leaves: this.leaf.map(l => l.serialize()),
+        };
+    }
+
+    restore(d) {
+        if (!d || typeof d !== 'object') return false;
+        if (!Array.isArray(d.leaves) || d.leaves.length !== 6) return false;
+        this.index = typeof d.index === 'number' ? d.index : this.index;
+        if (typeof d.x === 'number') this.x = d.x;
+        if (typeof d.y === 'number') this.y = d.y;
+        if (typeof d.radius === 'number') this.radius = d.radius;
+        if (typeof d.smallRadius === 'number') this._small_radius = d.smallRadius;
+        for (let i = 0; i < 6; i++) {
+            this.leaf[i].restore(d.leaves[i]);
+        }
+        if (typeof d.leafCount === 'number') {
+            this._leaf_count = d.leafCount;
+        } else {
+            // Recompute defensively from per-leaf alive state.
+            this._leaf_count = this.leaf.filter(l => l.color() > 0).length;
+        }
+        return true;
+    }
+
     addLeaf(flowerArr) {
         if (this._leaf_count >= 6) {
             return;

@@ -279,7 +279,64 @@
 - **GAME_OVER** — 힌트를 y=230 → **y=380** (BEST 배너 y=290..360 아래)으로 이동
 - **PAUSE** — 그대로 (Resume 버튼 y=100..200, 힌트 y=230이라 원래 비겹침)
 
-## 14. 후속 후보
+## 14. 게임 진행 상태 저장 / 이어하기
+
+기존 영속화는 최고 점수 1개만 `localStorage`에 저장. 게임 도중 탭을 닫으면 모드/점수/꽃잎 상태가 모두 소실되었음.
+
+요청: "현 상태 그대로 복원, DB 로딩 실패해도 게임이 실행." TDD 식으로 plan → tests → dev 순서로 진행.
+
+### 14.1 영속화 모델
+
+- 저장소: `localStorage` (작은 JSON, IndexedDB 과함)
+- 키: 기존 `DaisyHighScore`에 더해 `DaisyResume` 신설
+- 스키마 v=1, 변경 시 버전 다르면 무시 → 신규 게임 시작
+- 항상 `PAUSE_STATE`로 정규화 — 사용자가 명시적 Resume 누르도록
+
+### 14.2 직렬화 대상
+
+- `DaisyGame`: `_mode` / `_tick` / `_timerTicks` / `_addLeafIndex` / `_addLeafTable`
+- `Score`: `_score` / `_highScore` / `_prev_high_score` (`needToSave` 보존)
+- 7×`Flower`: `index` / 위치(`x`, `y`, `radius`) / `_small_radius` / `_leaf_count` / leaves[6]
+- 6×`Leaf`/꽃: `_color` / `_colorTable` / `_colorIdx` / `_life` / `_origin_life` / `_size`
+
+각 클래스에 `serialize()`(plain object 반환) / `restore(data)`(self mutation, 검증 실패 시 false) 메서드.
+
+### 14.3 트리거
+
+- 저장: `pause()` 시 + `window.beforeunload` 시 (PLAY 또는 PAUSE 상태)
+- 복원: `InitValue()` 부팅 직후, `try/catch`로 감싸 어떤 실패라도 IDLE 모드 선택 화면으로 이어짐
+- 삭제: 게임오버 도달(아케이드 타이머 만료, 퍼즐 막힘) + `start(mode)`로 새 모드 시작 (`mode` 인자 미지정 = pause 재개라 보존)
+
+### 14.4 실패 안전 (모든 경로 try/catch)
+
+- `localStorage` 접근 자체가 throw (Safari 시크릿) → `getScore`/`getResume` null·0 반환
+- JSON 파싱 실패 → `getResume` null
+- 저장된 값이 객체 아님 (배열/원시) → null
+- 스키마 버전 불일치 (`v !== 1`) → `restore` false
+- 필드 손상 (`flowers.length !== 7`, `mode` 비-숫자 등) → `restore` false
+- `setResume` / `clearResume`이 quota/disabled로 throw → 흡수, 게임 영향 없음
+
+### 14.5 테스트 (71건, +17)
+
+부트스트랩: `tests/_bootstrap.js`에 Map 기반 `localStorage` 스텁 + `LocalDB` / `_store` / `localStorage`를 노출 (스텁을 테스트에서 직접 조작 가능).
+
+신규 `localdb.test.js` (9건):
+- `getResume`은 미저장 시 null
+- `setResume` → `getResume` round-trip
+- `clearResume` 후 `getResume` null
+- 손상 JSON / 원시값 저장 시 null
+- `setItem`/`getItem`/`removeItem`이 throw해도 `setResume` / `getResume` / `clearResume` 모두 throw 흡수
+- `getScore` / `getResume` 키 분리 동작
+
+기존 테스트에 round-trip 추가 (4건):
+- `Score`: `serialize` → `restore` → 점수/고점/needToSave 보존
+- `Leaf`: 색·생명·`colorTable` 사이클 보존, restored leaf의 후속 `reset()`도 원본과 동일
+- `Flower`: 위치·인덱스·`leaf_count`·잎 색/생사 모두 일치
+- `DaisyGame`: 점수·모드·`_timerTicks`·꽃 잎 색 모두 일치, `restore` 후 `isPauseState()`
+
+`DaisyGame.restore` graceful 실패 (4건): null/undefined/버전 불일치/배열 길이 오류/모드 비-숫자
+
+## 15. 후속 후보
 
 - 남은 JS 파일들도 점진적으로 .ts로 이식 (현재는 ambient 선언으로 우회 중)
 - `flower.js` / `leaf.js` 인덱스 0–6 / 1–6 매핑을 자료구조로 분리해 가독성 정리

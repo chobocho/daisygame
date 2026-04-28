@@ -44,3 +44,15 @@ test("Score: increase below initial high keeps the initial high", () => {
   assert.equal(s.score(), 100);
   assert.equal(s.highScore(), 200);
 });
+
+test("Score: serialize -> restore round-trips current/high/prev", () => {
+  const a = new Score(100);
+  a.increase(150); // current=150, high=150, prev=100 -> needToSave=true
+  const snapshot = a.serialize();
+
+  const b = new Score(0);
+  b.restore(snapshot);
+  assert.equal(b.score(), 150);
+  assert.equal(b.highScore(), 150);
+  assert.equal(b.needToSave(), true);
+});

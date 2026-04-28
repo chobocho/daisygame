@@ -22,18 +22,61 @@ function printf(tag, log) {
 class LocalDB {
   constructor() {
     this.DB_NAME = 'DaisyHighScore';
+    this.RESUME_KEY = 'DaisyResume';
+    this.RESUME_SCHEMA_VERSION = 1;
   }
 
   getScore() {
-    let score = localStorage.getItem(this.DB_NAME);
-    if (score !== null) {
-      return score;
+    try {
+      let score = localStorage.getItem(this.DB_NAME);
+      if (score !== null) {
+        return score;
+      }
+    } catch (e) {
+      // localStorage unavailable (e.g. Safari private mode); fall through.
     }
     return 0;
   }
 
   setScore(score) {
-    localStorage.setItem(this.DB_NAME, score);
+    try {
+      localStorage.setItem(this.DB_NAME, score);
+    } catch (e) {
+      // Quota exceeded or storage disabled — high score persistence is best-effort.
+    }
+  }
+
+  getResume() {
+    let raw;
+    try {
+      raw = localStorage.getItem(this.RESUME_KEY);
+    } catch (e) {
+      return null;
+    }
+    if (!raw) return null;
+    try {
+      const parsed = JSON.parse(raw);
+      if (!parsed || typeof parsed !== 'object' || Array.isArray(parsed)) return null;
+      return parsed;
+    } catch (e) {
+      return null;
+    }
+  }
+
+  setResume(snapshot) {
+    try {
+      localStorage.setItem(this.RESUME_KEY, JSON.stringify(snapshot));
+    } catch (e) {
+      // Quota / storage disabled — resume save is best-effort.
+    }
+  }
+
+  clearResume() {
+    try {
+      localStorage.removeItem(this.RESUME_KEY);
+    } catch (e) {
+      // ignore
+    }
   }
 }
 
@@ -293,6 +336,23 @@ class Score {
   needToSave() {
     return this._prev_high_score < this._highScore;
   }
+
+  serialize() {
+    return {
+      score: this._score,
+      high: this._highScore,
+      prevHigh: this._prev_high_score,
+    };
+  }
+
+  restore(d) {
+    if (!d || typeof d !== 'object') return false;
+    if (typeof d.score !== 'number' || typeof d.high !== 'number') return false;
+    this._score = d.score;
+    this._highScore = d.high;
+    this._prev_high_score = typeof d.prevHigh === 'number' ? d.prevHigh : d.high;
+    return true;
+  }
 }
 
 </script>
@@ -338,6 +398,31 @@ class Leaf {
             this._color = 0;
             this._life = 0;
         }
+    }
+
+    serialize() {
+        return {
+            color: this._color,
+            colorTable: this._colorTable.slice(),
+            colorIdx: this._colorIdx,
+            life: this._life,
+            originLife: this._origin_life,
+            size: this._size,
+        };
+    }
+
+    restore(d) {
+        if (!d || typeof d !== 'object') return false;
+        if (typeof d.color !== 'number' || typeof d.life !== 'number') return false;
+        this._color = d.color;
+        if (Array.isArray(d.colorTable) && d.colorTable.length > 0) {
+            this._colorTable = d.colorTable.slice();
+        }
+        if (typeof d.colorIdx === 'number') this._colorIdx = d.colorIdx;
+        this._life = d.life;
+        if (typeof d.originLife === 'number' && d.originLife > 0) this._origin_life = d.originLife;
+        if (typeof d.size === 'number') this._size = d.size;
+        return true;
     }
 }
 </script>
@@ -399,6 +484,38 @@ class Flower {
         }
         this.leaf[i].remove();
         this._leaf_count--;
+    }
+
+    serialize() {
+        return {
+            index: this.index,
+            x: this.x,
+            y: this.y,
+            radius: this.radius,
+            smallRadius: this._small_radius,
+            leafCount: this._leaf_count,
+            leaves: this.leaf.map(l => l.serialize()),
+        };
+    }
+
+    restore(d) {
+        if (!d || typeof d !== 'object') return false;
+        if (!Array.isArray(d.leaves) || d.leaves.length !== 6) return false;
+        this.index = typeof d.index === 'number' ? d.index : this.index;
+        if (typeof d.x === 'number') this.x = d.x;
+        if (typeof d.y === 'number') this.y = d.y;
+        if (typeof d.radius === 'number') this.radius = d.radius;
+        if (typeof d.smallRadius === 'number') this._small_radius = d.smallRadius;
+        for (let i = 0; i < 6; i++) {
+            this.leaf[i].restore(d.leaves[i]);
+        }
+        if (typeof d.leafCount === 'number') {
+            this._leaf_count = d.leafCount;
+        } else {
+            // Recompute defensively from per-leaf alive state.
+            this._leaf_count = this.leaf.filter(l => l.color() > 0).length;
+        }
+        return true;
     }
 
     addLeaf(flowerArr) {
@@ -856,6 +973,45 @@ class DaisyGame {
     needToSaveScore() {
         return this._score.needToSave();
     }
+
+    serialize() {
+        return {
+            v: 1,
+            mode: this._mode,
+            tick: this._tick,
+            timerTicks: this._timerTicks,
+            addLeafIndex: this._addLeafIndex,
+            addLeafTable: this._addLeafTable.slice(),
+            score: this._score.serialize(),
+            flowers: this._flowerArr.map(f => f.serialize()),
+        };
+    }
+
+    restore(d) {
+        if (!d || typeof d !== 'object') return false;
+        if (d.v !== 1) return false;
+        if (typeof d.mode !== 'number') return false;
+        if (!Array.isArray(d.flowers) || d.flowers.length !== 7) return false;
+
+        // Apply each piece defensively; if any inner restore is shaped wrong
+        // we still want the game to reach a usable PAUSE_STATE rather than
+        // half-applied chaos. So we apply, then enforce invariants.
+        this._mode = d.mode;
+        this._tick = (typeof d.tick === 'number') ? d.tick : 0;
+        this._timerTicks = (typeof d.timerTicks === 'number') ? d.timerTicks : 0;
+        this._addLeafIndex = (typeof d.addLeafIndex === 'number') ? d.addLeafIndex : 0;
+        if (Array.isArray(d.addLeafTable) && d.addLeafTable.length > 0) {
+            this._addLeafTable = d.addLeafTable.slice();
+        }
+        if (d.score) this._score.restore(d.score);
+        for (let i = 0; i < 7; i++) {
+            this._flowerArr[i].restore(d.flowers[i]);
+            this._flowerArr[i].set_index(i);
+        }
+        // Always come back paused so the player explicitly resumes.
+        this._state = this.PAUSE_STATE;
+        return true;
+    }
 }
 
 </script>
@@ -878,6 +1034,9 @@ class GameEngine{
           printf("[GameEngine]", "SaveScore");
           this._scoreDB.setScore(this._game.highScore());
        }
+       // The board is finished — drop any resume snapshot so the next launch
+       // starts fresh on the mode-select screen.
+       this._scoreDB.clearResume();
     }
   }
 
@@ -888,10 +1047,17 @@ class GameEngine{
         printf("[GameEngine]", "SaveScore");
         this._scoreDB.setScore(this._game.highScore());
       }
+      this._scoreDB.setResume(this._game.serialize());
     }
   }
 
   start(mode) {
+    // Picking a mode on idle / game-over is a fresh start — discard any
+    // pending resume snapshot. Resuming from pause omits `mode`, so the
+    // snapshot is preserved until the next pause overwrites it.
+    if (mode !== undefined) {
+      this._scoreDB.clearResume();
+    }
     this._game.start(mode);
   }
 
@@ -1808,6 +1974,28 @@ function InitValue() {
   daisyGame.init();
   gameEngine = new GameEngine(daisyGame, scoreDB);
   drawEngine = new DrawEngine(daisyGame, imageLoader);
+
+  // Try to restore an in-progress game. Any failure (storage missing, JSON
+  // corruption, schema mismatch) keeps us on the IDLE mode-select screen.
+  try {
+    const snapshot = scoreDB.getResume();
+    if (snapshot && daisyGame.restore(snapshot)) {
+      printf("[Main]", "Resumed saved game");
+    }
+  } catch (e) {
+    printf("[Main]", "Resume restore failed: " + e);
+  }
+
+  // Persist the game when the user navigates away or closes the tab.
+  window.addEventListener('beforeunload', function () {
+    try {
+      if (daisyGame.isPlayState() || daisyGame.isPauseState()) {
+        scoreDB.setResume(daisyGame.serialize());
+      }
+    } catch (e) {
+      // never block unload
+    }
+  });
 
   window.onkeydown = KeyPressEvent;
 

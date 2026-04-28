@@ -20,12 +20,26 @@ function read(file) {
 // Files that have no DOM dependency.
 const CORE_FILES = ["util.js", "effects.js", "score.js", "leaf.js", "flower.js"];
 
+// Source fragment that wires a Map-backed localStorage stub into the IIFE.
+// Tests reach the underlying Map (`_store`) via the returned object so they
+// can clear state between cases or simulate storage exceptions.
+const STORAGE_STUB = `
+  const _store = new Map();
+  const localStorage = {
+    getItem(k) { return _store.has(k) ? _store.get(k) : null; },
+    setItem(k, v) { _store.set(k, String(v)); },
+    removeItem(k) { _store.delete(k); },
+    clear() { _store.clear(); },
+  };
+`;
+
 function loadCore() {
   const body = `
     "use strict";
     const console = { log() {}, warn() {}, error() {} };
+    ${STORAGE_STUB}
     ${CORE_FILES.map(read).join("\n\n")}
-    return { Score, Leaf, Flower, Effects, LocalDB };
+    return { Score, Leaf, Flower, Effects, LocalDB, _store, localStorage };
   `;
   return new Function(body)();
 }
@@ -45,9 +59,14 @@ function loadGame() {
   const body = `
     "use strict";
     const console = { log() {}, warn() {}, error() {} };
+    ${STORAGE_STUB}
     ${stubs}
     ${files.map(read).join("\n\n")}
-    return { Score, Leaf, Flower, Effects, DaisyGame, MODE_ARCADE, MODE_PUZZLE, MODE_ENDLESS };
+    return {
+      Score, Leaf, Flower, Effects, DaisyGame, LocalDB,
+      MODE_ARCADE, MODE_PUZZLE, MODE_ENDLESS,
+      _store, localStorage,
+    };
   `;
   return new Function(body)();
 }

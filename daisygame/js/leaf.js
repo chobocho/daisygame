@@ -40,4 +40,29 @@ class Leaf {
             this._life = 0;
         }
     }
+
+    serialize() {
+        return {
+            color: this._color,
+            colorTable: this._colorTable.slice(),
+            colorIdx: this._colorIdx,
+            life: this._life,
+            originLife: this._origin_life,
+            size: this._size,
+        };
+    }
+
+    restore(d) {
+        if (!d || typeof d !== 'object') return false;
+        if (typeof d.color !== 'number' || typeof d.life !== 'number') return false;
+        this._color = d.color;
+        if (Array.isArray(d.colorTable) && d.colorTable.length > 0) {
+            this._colorTable = d.colorTable.slice();
+        }
+        if (typeof d.colorIdx === 'number') this._colorIdx = d.colorIdx;
+        this._life = d.life;
+        if (typeof d.originLife === 'number' && d.originLife > 0) this._origin_life = d.originLife;
+        if (typeof d.size === 'number') this._size = d.size;
+        return true;
+    }
 }

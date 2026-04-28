@@ -56,3 +56,23 @@ test("Leaf: size shrinks proportionally to remaining life", () => {
   // Math.floor(10 * 7 / 15) === 4
   assert.equal(l.size(), 4);
 });
+
+test("Leaf: serialize -> restore round-trips color, life, and color cycle", () => {
+  const a = new Leaf(10);
+  a.remove();
+  a.reduceSize();
+  a.reduceSize();
+  const snapshot = a.serialize();
+
+  const b = new Leaf(10);
+  b.restore(snapshot);
+  assert.equal(b.color(), a.color());
+  assert.equal(b.size(), a.size());
+  assert.equal(b.isAlive(), a.isAlive());
+
+  // Reset on the restored leaf should advance through the cloned colorTable
+  // exactly as the original would.
+  a.reset();
+  b.reset();
+  assert.equal(b.color(), a.color());
+});

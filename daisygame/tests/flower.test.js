@@ -52,6 +52,26 @@ test("Flower: is_inside hits points within the radius", () => {
   assert.equal(f.is_inside(140, 100, 0, 1), false, "outside radius");
 });
 
+test("Flower: serialize -> restore round-trips position and leaves", () => {
+  const a = new Flower(3);
+  a.set_pos(150, 250, 30);
+  a.remove(0);
+  a.remove(2);
+  const snapshot = a.serialize();
+
+  const b = new Flower(0);
+  b.restore(snapshot);
+  assert.equal(b.index, 3);
+  assert.equal(b.x, 150);
+  assert.equal(b.y, 250);
+  assert.equal(b.radius, 30);
+  assert.equal(b.leaf_count(), a.leaf_count());
+  for (let i = 0; i < 6; i++) {
+    assert.equal(b.leaf[i].color(), a.leaf[i].color(), `leaf ${i} color`);
+    assert.equal(b.leaf[i].isAlive(), a.leaf[i].isAlive(), `leaf ${i} alive`);
+  }
+});
+
 test("Flower: is_inside scales with gScale and gStartX", () => {
   const f = new Flower(0);
   f.set_pos(100, 100, 30);

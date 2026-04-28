@@ -138,6 +138,28 @@ function InitValue() {
   gameEngine = new GameEngine(daisyGame, scoreDB);
   drawEngine = new DrawEngine(daisyGame, imageLoader);
 
+  // Try to restore an in-progress game. Any failure (storage missing, JSON
+  // corruption, schema mismatch) keeps us on the IDLE mode-select screen.
+  try {
+    const snapshot = scoreDB.getResume();
+    if (snapshot && daisyGame.restore(snapshot)) {
+      printf("[Main]", "Resumed saved game");
+    }
+  } catch (e) {
+    printf("[Main]", "Resume restore failed: " + e);
+  }
+
+  // Persist the game when the user navigates away or closes the tab.
+  window.addEventListener('beforeunload', function () {
+    try {
+      if (daisyGame.isPlayState() || daisyGame.isPauseState()) {
+        scoreDB.setResume(daisyGame.serialize());
+      }
+    } catch (e) {
+      // never block unload
+    }
+  });
+
   window.onkeydown = KeyPressEvent;
 
   canvas.addEventListener("mousedown", mouseListener);
