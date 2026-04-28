@@ -251,6 +251,24 @@ test("DaisyGame: puzzleLevel returns 0 outside puzzle mode", () => {
   assert.equal(g.puzzleLevel(), 0);
 });
 
+test("DaisyGame: levelSelectPlay transitions LEVEL_SELECT -> PLAY for unlocked level", () => {
+  const g = fresh();
+  g.start(MODE_PUZZLE);
+  assert.equal(g.isLevelSelectState(), true);
+  g.levelSelectPlay();
+  assert.equal(g.isPlayState(), true, "expected PLAY state after levelSelectPlay");
+  assert.equal(g.puzzleLevel(), 1);
+});
+
+test("DaisyGame: levelSelectPlay does nothing for a locked level", () => {
+  const g = fresh();
+  g.start(MODE_PUZZLE);
+  // Force selection past the unlocked frontier (default unlocked=1).
+  g._puzzleLevel = 5;
+  g.levelSelectPlay();
+  assert.equal(g.isLevelSelectState(), true, "must remain in LEVEL_SELECT");
+});
+
 // ---------- mixed rotation directions ----------
 
 test("DaisyGame: _init_flower assigns at least 2 CW and 2 CCW directions", () => {

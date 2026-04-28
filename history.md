@@ -516,7 +516,27 @@ target(L)  = 50 * L                                      // L1:50, L100:5000
 
 총 87 → **111건**.
 
-## 19. 후속 후보
+## 19. Level Select Play 버튼 클릭 안 되던 문제 (회귀)
+
+피드백: "puzzle mode에서 play 버튼 클릭 불가."
+
+### 원인
+1. `_drawFlowers`가 모든 상태에서 호출돼 LEVEL_SELECT 화면에서도 이전 세션의 7개 꽃이 패널 뒤에 그려짐. 그 중 중앙 꽃(200, 300, r=30)이 Play 버튼 위치(200, 305)와 거의 겹침.
+2. 상태와 무관하게 `getEventCode`가 마지막에 꽃 hit-test를 돌려서, Play hit 영역 밖(예: 시각상 둥근 화살표와 Play 버튼 사이 32px 갭)을 클릭하면 뒤의 꽃이 잡혀 `KEY_X` → `turnFlower`로 라우팅. 그러나 LEVEL_SELECT 상태에선 `turnFlower`가 즉시 return → "클릭이 무반응"으로 보임.
+3. `_drawFlowers`도 `for (i = 0; i < 7; i++)` 하드코딩 — 퍼즐 N=2 레벨에서는 `flowers[2..6]`이 undefined라 잠재적 크래시.
+
+### 수정 (`src/draw_engine.ts`)
+
+- `_drawFlowers`: LEVEL_SELECT 상태에선 조기 return, 그 외에도 `flowers.length`로 루프 (가변 N 안전)
+- `getEventCode`의 꽃 hit-test 루프를 `isPlayState()`로 가드 (다른 상태에서는 어차피 `turnFlower`가 no-op이므로 정리)
+- Play 버튼 hit 영역을 시각 130–270 → **95–305로 확장** (시각은 그대로, Prev / Next 사이 데드존을 모두 흡수). y는 281–329 그대로
+
+### 테스트 추가 (113건, +2)
+
+- `levelSelectPlay`가 unlocked 레벨에서 LEVEL_SELECT → PLAY 전이
+- locked 레벨로 강제 설정 후 `levelSelectPlay`는 LEVEL_SELECT 유지 (no-op)
+
+## 20. 후속 후보
 
 - 남은 JS 파일들도 점진적으로 .ts로 이식 (현재는 ambient 선언으로 우회 중)
 - `flower.js` / `leaf.js` 인덱스 0–6 / 1–6 매핑을 자료구조로 분리해 가독성 정리

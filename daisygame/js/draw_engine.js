@@ -635,10 +635,15 @@ class DrawEngine {
             if (this._isClickMusicButton(x, y))
                 return M_KEY;
         }
-        const flowers = this.game.getFlowers();
-        for (let i = 0; i < 7; i++) {
-            if (flowers[i].is_inside(x, y, gStartX, gScale)) {
-                return i + KEY_0;
+        // Flower taps only matter while playing. In other states the previous
+        // session's daisies could sit behind menu panels and silently swallow
+        // clicks because turnFlower is a no-op outside PLAY.
+        if (this.game.isPlayState()) {
+            const flowers = this.game.getFlowers();
+            for (let i = 0; i < flowers.length; i++) {
+                if (flowers[i].is_inside(x, y, gStartX, gScale)) {
+                    return i + KEY_0;
+                }
             }
         }
         return 0;
@@ -654,9 +659,11 @@ class DrawEngine {
         const nx = gStartX + 330 * gScale;
         if ((x - nx) ** 2 + (y - py) ** 2 <= r ** 2)
             return NAV_NEXT_KEY;
-        // Play button at (200, 305) halfW=70 halfH=24
-        const pbx1 = gStartX + (200 - 70) * gScale;
-        const pbx2 = gStartX + (200 + 70) * gScale;
+        // Play button at (200, 305). Visual halfW=70 (130..270), but the hit
+        // area spans from just past Prev (95) to just before Next (305) so the
+        // gaps don't silently absorb taps.
+        const pbx1 = gStartX + 95 * gScale;
+        const pbx2 = gStartX + 305 * gScale;
         const pby1 = (305 - 24) * gScale;
         const pby2 = (305 + 24) * gScale;
         if (x > pbx1 && x < pbx2 && y > pby1 && y < pby2)
@@ -736,8 +743,13 @@ class DrawEngine {
     }
     // ---------- Flowers (#1 + #2) ----------
     _drawFlowers() {
+        // Skip on the level-select screen so the previous session's daisies
+        // don't sit behind the panel and intercept clicks aimed at the Play
+        // / arrow / Main Menu buttons.
+        if (this.game.isLevelSelectState())
+            return;
         const flowers = this.game.getFlowers();
-        for (let i = 0; i < 7; i++) {
+        for (let i = 0; i < flowers.length; i++) {
             this._drawFlower(flowers[i]);
         }
     }
