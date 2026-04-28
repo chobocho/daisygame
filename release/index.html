@@ -1847,21 +1847,28 @@ class DrawEngine {
         bufCtx.lineWidth = 2;
         bufCtx.strokeStyle = "#a35a1d";
         bufCtx.stroke();
+        // Center triangle + label as a single group so longer labels (e.g.
+        // "Resume") don't drift right of center.
+        bufCtx.font = "bold 22px " + DrawEngine.UI_FONT;
+        bufCtx.textBaseline = "middle";
+        const triangleW = 18;
+        const gap = 6;
+        const labelWidth = bufCtx.measureText(label).width;
+        const groupW = triangleW + gap + labelWidth;
+        const triLeft = cx - groupW / 2;
+        const triRight = triLeft + triangleW;
         // Triangle play glyph.
         bufCtx.fillStyle = "#5b2f0a";
         bufCtx.beginPath();
-        const tx = cx - 22;
-        bufCtx.moveTo(tx, cy - 12);
-        bufCtx.lineTo(tx + 18, cy);
-        bufCtx.lineTo(tx, cy + 12);
+        bufCtx.moveTo(triLeft, cy - 12);
+        bufCtx.lineTo(triRight, cy);
+        bufCtx.lineTo(triLeft, cy + 12);
         bufCtx.closePath();
         bufCtx.fill();
         // Label.
-        bufCtx.font = "bold 22px " + DrawEngine.UI_FONT;
         bufCtx.textAlign = "left";
-        bufCtx.textBaseline = "middle";
         bufCtx.fillStyle = "#5b2f0a";
-        bufCtx.fillText(label, cx - 2, cy + 1);
+        bufCtx.fillText(label, triRight + gap, cy + 1);
         bufCtx.restore();
     }
     // Pause uses the painted button (#10). Music/mute drop the disc and render
