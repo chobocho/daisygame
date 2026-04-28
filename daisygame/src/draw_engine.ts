@@ -365,16 +365,34 @@ class DrawEngine {
     const lvl = this.game.puzzleLevel();
     if (lvl <= 0) return;
     const cfg = Puzzle.levelConfig(lvl);
+    const prog = this.game.puzzleProgress();
+    const best = prog ? prog.bestScore(lvl) : 0;
+
+    // Star thresholds mirror Puzzle.starRating: T, ceil(T * 1.5), T * 2.
+    const t1 = cfg.target;
+    const t2 = Math.ceil(cfg.target * 1.5);
+    const t3 = cfg.target * 2;
+
     bufCtx.save();
-    bufCtx.font = "bold 14px " + DrawEngine.UI_FONT;
     bufCtx.textAlign = "left";
     bufCtx.textBaseline = "middle";
-    bufCtx.fillStyle = "#FFFFFF";
     bufCtx.lineWidth = 3;
-    bufCtx.strokeStyle = "rgba(0,0,0,0.55)";
-    const text = "Lv " + lvl + "  ·  Target " + cfg.target;
-    bufCtx.strokeText(text, 80, 22);
-    bufCtx.fillText(text, 80, 22);
+    bufCtx.strokeStyle = "rgba(0,0,0,0.6)";
+
+    // Line 1 — level + best (sits to the right of the pause button).
+    bufCtx.font = "bold 14px " + DrawEngine.UI_FONT;
+    bufCtx.fillStyle = "#FFFFFF";
+    const line1 = "Lv " + lvl + "    Best " + best;
+    bufCtx.strokeText(line1, 78, 18);
+    bufCtx.fillText(line1, 78, 18);
+
+    // Line 2 — per-star target points.
+    bufCtx.font = "12px " + DrawEngine.UI_FONT;
+    bufCtx.fillStyle = "#FFEFA8";
+    const line2 = "\u2605 " + t1 + "   \u2605\u2605 " + t2 + "   \u2605\u2605\u2605 " + t3;
+    bufCtx.strokeText(line2, 78, 38);
+    bufCtx.fillText(line2, 78, 38);
+
     bufCtx.restore();
   }
 
