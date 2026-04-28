@@ -54,4 +54,12 @@ class GameEngine{
   togglePlayMusic() {
     this._game.togglePlayMusic();
   }
+
+  gotoMenu() {
+    if (this._game.needToSaveScore()) {
+      this._scoreDB.setScore(this._game.highScore());
+    }
+    this._scoreDB.clearResume();
+    this._game.init();
+  }
 }

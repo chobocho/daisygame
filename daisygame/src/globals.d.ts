@@ -20,6 +20,7 @@ declare const MODE_ENDLESS: number;
 declare const MODE_ARCADE_KEY: number;
 declare const MODE_PUZZLE_KEY: number;
 declare const MODE_ENDLESS_KEY: number;
+declare const MENU_KEY: number;
 
 declare let gStartX: number;
 declare let gBlockSize: number;

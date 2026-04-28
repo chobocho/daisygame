@@ -163,8 +163,8 @@ class DrawEngine {
       this._drawHighScore();
     } else if (this.game.isPauseState()) {
       this._drawWordmark("Paused");
-      this._drawPlayButton(200, 150, 100, 32, "Resume");
-      this._drawHint("Tap Resume to continue");
+      this._drawPlayButton(200, 140, 100, 28, "Resume");
+      this._drawMenuButton(200, 210, 85, 22);
       this._drawHighScore();
     } else if (this.game.isGameOverState()) {
       const m = this.game.mode();
@@ -237,6 +237,45 @@ class DrawEngine {
     bufCtx.fillStyle = "#FFFFFF";
     bufCtx.strokeText(label, cx + 16, cy + 1);
     bufCtx.fillText(label, cx + 16, cy + 1);
+
+    bufCtx.restore();
+  }
+
+  // Secondary, neutral button — shown on the pause screen so the player can
+  // abandon the current game and go back to the mode-select (IDLE) screen.
+  private _drawMenuButton(cx: number, cy: number, halfW: number, halfH: number): void {
+    bufCtx.save();
+    // Drop shadow.
+    bufCtx.fillStyle = "rgba(0,0,0,0.18)";
+    this._roundRectPath(cx - halfW + 2, cy - halfH + 3, halfW * 2, halfH * 2, 12);
+    bufCtx.fill();
+
+    // Body — muted grey gradient.
+    const grad = bufCtx.createLinearGradient(0, cy - halfH, 0, cy + halfH);
+    grad.addColorStop(0, "#E0E5EA");
+    grad.addColorStop(1, "#7A8086");
+    bufCtx.fillStyle = grad;
+    this._roundRectPath(cx - halfW, cy - halfH, halfW * 2, halfH * 2, 12);
+    bufCtx.fill();
+    bufCtx.lineWidth = 2;
+    bufCtx.strokeStyle = "#3a2a18";
+    bufCtx.stroke();
+
+    // Home glyph on the left.
+    bufCtx.font = "18px " + DrawEngine.EMOJI_FONT;
+    bufCtx.textAlign = "center";
+    bufCtx.textBaseline = "middle";
+    bufCtx.fillStyle = "#000";
+    bufCtx.fillText("\u{1F3E0}", cx - halfW + 18, cy);
+
+    // Label.
+    bufCtx.font = "bold 16px " + DrawEngine.UI_FONT;
+    bufCtx.textAlign = "center";
+    bufCtx.lineWidth = 2.5;
+    bufCtx.strokeStyle = "rgba(0,0,0,0.55)";
+    bufCtx.fillStyle = "#FFFFFF";
+    bufCtx.strokeText("Main Menu", cx + 10, cy + 1);
+    bufCtx.fillText("Main Menu", cx + 10, cy + 1);
 
     bufCtx.restore();
   }
@@ -475,11 +514,20 @@ class DrawEngine {
       const code = this._hitModeButton(x, y);
       if (code !== 0) return code;
     } else if (this.game.isPauseState()) {
-      const bx1 = gStartX + 100 * gScale;
-      const bx2 = gStartX + 300 * gScale;
-      const by1 = 100 * gScale;
-      const by2 = 200 * gScale;
-      if (x > bx1 && x < bx2 && y > by1 && y < by2) return S_KEY;
+      // Resume — primary button at (200, 140) ± (100, 28). Hit box is a touch
+      // generous to match the previous behavior.
+      const rbx1 = gStartX + 100 * gScale;
+      const rbx2 = gStartX + 300 * gScale;
+      const rby1 = (140 - 32) * gScale;
+      const rby2 = (140 + 32) * gScale;
+      if (x > rbx1 && x < rbx2 && y > rby1 && y < rby2) return S_KEY;
+
+      // Main Menu — secondary button at (200, 210) ± (85, 22).
+      const mbx1 = gStartX + (200 - 85) * gScale;
+      const mbx2 = gStartX + (200 + 85) * gScale;
+      const mby1 = (210 - 22) * gScale;
+      const mby2 = (210 + 22) * gScale;
+      if (x > mbx1 && x < mbx2 && y > mby1 && y < mby2) return MENU_KEY;
     } else if (this.game.isPlayState()) {
       const bx1 = gStartX + 10 * gScale;
       const bx2 = gStartX + 70 * gScale;

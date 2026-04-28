@@ -56,7 +56,13 @@ function processKeyEvent(code) {
       break;
     case M_KEY:
       gameEngine.togglePlayMusic();
-      break
+      break;
+    case 27: // Escape
+    case MENU_KEY:
+      if (daisyGame.isPauseState()) {
+        gameEngine.gotoMenu();
+      }
+      break;
     default:
       break;
   }

@@ -336,7 +336,44 @@
 
 `DaisyGame.restore` graceful 실패 (4건): null/undefined/버전 불일치/배열 길이 오류/모드 비-숫자
 
-## 15. 후속 후보
+## 15. PAUSE 화면에 Main Menu 버튼 추가
+
+피드백: "pause 시 나오는 메뉴에 main 메뉴로 가는 방법이 없어." 모드 선택 화면(IDLE)으로 복귀하는 명시적 버튼이 필요.
+
+### 15.1 동작
+
+- **버튼**: PAUSE 화면 Resume 아래에 회색 그라데이션의 "🏠 Main Menu" 버튼
+- **클릭** → `gameEngine.gotoMenu()`:
+  1. `needToSaveScore()`면 `setScore`로 최고점 영속화
+  2. `clearResume()`로 진행 중 스냅샷 삭제 (사용자가 명시적으로 게임 포기)
+  3. `daisyGame.init()` → IDLE 상태(모드 선택 화면)로 복귀
+- **키보드**: `Esc` (PAUSE 상태에서만 작동, 그 외엔 no-op)
+- 신규 합성 키 `MENU_KEY = 204`
+
+### 15.2 변경
+
+- `js/values.js` — `MENU_KEY = 204`
+- `js/main.js` — `case 27`(Esc) / `case MENU_KEY` 라우팅
+- `js/game_engine.js` — `gotoMenu()` 메서드
+- `src/globals.d.ts` — `MENU_KEY` 선언
+- `src/draw_engine.ts`
+  - PAUSE 화면 레이아웃 재배치: Resume를 cy=140으로 약간 줄여 두 번째 버튼 자리 확보, Main Menu 버튼은 cy=210
+  - 신규 `_drawMenuButton(cx, cy, halfW, halfH)` — 회색 그라데이션 + 🏠 글리프 + 흰 라벨, 시각적으로 secondary
+  - PAUSE 상태 `getEventCode` 분기에 두 번째 히트박스 추가
+  - 기존 "Tap Resume to continue" 힌트 제거 (Main Menu 버튼이 들어가면서 y=230 힌트 위치와 겹쳐서)
+
+### 15.3 테스트 (77건, +6)
+
+신규 `game_engine.test.js` — 부트스트랩 `loadGame()`이 이제 `game_engine.js`도 평가, `GameEngine`을 노출:
+
+- PAUSE → `gotoMenu` → IDLE 상태 전환
+- `gotoMenu`가 resume 슬롯 삭제
+- `gotoMenu`가 변경된 최고점을 `setScore`로 영속화
+- IDLE에서 `gotoMenu` 호출은 no-op (안전)
+- `start(mode)`는 resume 슬롯 삭제 (새 게임 = fresh start 시멘틱)
+- `start()` 인자 없이는 resume 슬롯 보존 (PAUSE → resume 시멘틱)
+
+## 16. 후속 후보
 
 - 남은 JS 파일들도 점진적으로 .ts로 이식 (현재는 ambient 선언으로 우회 중)
 - `flower.js` / `leaf.js` 인덱스 0–6 / 1–6 매핑을 자료구조로 분리해 가독성 정리
