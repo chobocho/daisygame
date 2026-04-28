@@ -209,8 +209,13 @@ class DaisyGame {
             return;
         }
 
+        // Per-pair score = 2 (base) + color bonus 1..7. Rainbow pairs
+        // award a flat 8. Combos accumulate by simply summing the pairs.
+        const COLOR_BONUS = [0, 1, 2, 3, 4, 5, 6, 7];
+        const RAINBOW_PAIR_SCORE = 8;
+
         let removedLeaf = 0;
-        let rainbowPairs = 0;
+        let gained = 0;
         const matches = [];
         for (let leaf of this._leafMap[flower]) {
             let left_flower = Math.floor(leaf[0] / 10);
@@ -224,22 +229,19 @@ class DaisyGame {
             // Rainbow leaves act as wildcards — they match any color.
             const colorMatch = (ll.color() === rl.color()) || ll.isRainbow() || rl.isRainbow();
             if (ll.isAlive() && rl.isAlive() && colorMatch) {
-                const colorIdx = ll.isRainbow() ? rl.color() : ll.color();
+                const isRainbow = ll.isRainbow() || rl.isRainbow();
+                const baseColor = ll.isRainbow() ? rl.color() : ll.color();
+                gained += isRainbow ? RAINBOW_PAIR_SCORE : (2 + (COLOR_BONUS[baseColor] || 0));
+
                 const lp = this._leafScreenPos(left_flower, left_flower_leaf);
                 const rp = this._leafScreenPos(right_flower, right_flower_leaf);
-                if (ll.isRainbow() || rl.isRainbow()) rainbowPairs++;
                 this._flowerArr[left_flower].remove(left_flower_leaf);
                 this._flowerArr[right_flower].remove(right_flower_leaf);
                 removedLeaf++;
-                matches.push({ x: (lp.x + rp.x) / 2, y: (lp.y + rp.y) / 2, colorIdx });
+                matches.push({ x: (lp.x + rp.x) / 2, y: (lp.y + rp.y) / 2, colorIdx: baseColor });
             }
         }
 
-        // Per-turn score by simultaneous-pair count. Index 1 is generous (5)
-        // so puzzle targets stay reachable. Each rainbow-involved pair adds
-        // a flat +3 (5 + 3 = 8 for a single rainbow match).
-        const scoreTable = [0, 5, 10, 20, 50, 128, 256, 0, 0, 0, 0, 0, 0, 0];
-        const gained = scoreTable[removedLeaf] + 3 * rainbowPairs;
         this.increaseScore(gained);
 
         if (removedLeaf === 0) return;

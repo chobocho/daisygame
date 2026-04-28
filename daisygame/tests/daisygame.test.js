@@ -96,6 +96,47 @@ test("DaisyGame: init clears the Effects queue", () => {
   assert.equal(Effects.particles.length, 0);
 });
 
+function planForcedMatch(g, color) {
+  const flowers = g.getFlowers();
+  for (let f = 0; f < flowers.length; f++) {
+    for (let i = 0; i < 6; i++) {
+      flowers[f].leaf[i]._color = 0;
+      flowers[f].leaf[i]._life = 0;
+    }
+  }
+  flowers[0].set_direction(1);
+  flowers[0].leaf[5]._color = color;
+  flowers[0].leaf[5]._life = 15;
+  flowers[1].leaf[3]._color = color;
+  flowers[1].leaf[3]._life = 15;
+}
+
+test("DaisyGame: color-1 pair awards 3 points (2 base + 1 bonus)", () => {
+  const g = fresh();
+  g.start();
+  planForcedMatch(g, 1);
+  g.turnFlower(0);
+  assert.equal(g.score(), 3);
+});
+
+test("DaisyGame: color-7 pair awards 9 points (2 base + 7 bonus)", () => {
+  const g = fresh();
+  g.start();
+  planForcedMatch(g, 7);
+  g.turnFlower(0);
+  assert.equal(g.score(), 9);
+});
+
+test("DaisyGame: color bonuses ramp 1..7 across colors", () => {
+  for (let c = 1; c <= 7; c++) {
+    const g = fresh();
+    g.start();
+    planForcedMatch(g, c);
+    g.turnFlower(0);
+    assert.equal(g.score(), 2 + c, `color ${c} should award ${2 + c} points`);
+  }
+});
+
 test("DaisyGame: a rainbow-leaf match awards 8 points (5 + 3 bonus)", () => {
   const g = fresh();
   g.start();
