@@ -57,6 +57,55 @@ test("Leaf: size shrinks proportionally to remaining life", () => {
   assert.equal(l.size(), 4);
 });
 
+// ---------- Birth (creation) animation ----------
+
+test("Leaf: constructor leaf is fully grown (no birth animation)", () => {
+  const l = new Leaf(10);
+  assert.equal(l.size(), 10);
+});
+
+test("Leaf: playBirth shrinks size to start the birth animation", () => {
+  const l = new Leaf(10);
+  l.playBirth();
+  assert.ok(l.size() < 10, "size should shrink while the birth animation plays");
+});
+
+test("Leaf: advanceBirth grows the leaf back to full size", () => {
+  const l = new Leaf(10);
+  l.playBirth();
+  const sizes = [];
+  for (let i = 0; i < 12; i++) {
+    sizes.push(l.size());
+    l.advanceBirth();
+  }
+  // Monotonic non-decreasing during birth animation.
+  for (let i = 1; i < sizes.length; i++) {
+    assert.ok(sizes[i] >= sizes[i - 1], `size went backwards at step ${i}`);
+  }
+  assert.equal(l.size(), 10);
+});
+
+test("Leaf: reset alone does not retrigger birth (size stays full)", () => {
+  const l = new Leaf(10);
+  l.remove();
+  l.reduceSize();
+  l.reset();
+  assert.equal(l.isAlive(), true);
+  // Birth state unchanged by reset; the caller (Flower.addLeaf) decides.
+  assert.equal(l.size(), 10);
+});
+
+test("Leaf: serialize -> restore preserves the birth animation phase", () => {
+  const a = new Leaf(10);
+  a.playBirth();
+  a.advanceBirth();
+  a.advanceBirth();
+  const snap = a.serialize();
+  const b = new Leaf(10);
+  b.restore(snap);
+  assert.equal(b.size(), a.size());
+});
+
 test("Leaf: serialize -> restore round-trips color, life, and color cycle", () => {
   const a = new Leaf(10);
   a.remove();

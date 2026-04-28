@@ -475,6 +475,21 @@ class Leaf {
         this._size = radius;
         this._origin_life = 15;
         this._life = 15;
+        // Birth animation: a freshly placed leaf grows from 0 to full size
+        // over _birthMax ticks. Constructor leaves start fully grown so
+        // existing code paths and tests don't see a transient zero size.
+        this._birthMax = 8;
+        this._birth = this._birthMax;
+    }
+
+    playBirth() {
+        // Trigger the grow-in animation. Caller (Flower.addLeaf or
+        // DaisyGame._init_flower) decides when to play it.
+        this._birth = 0;
+    }
+
+    advanceBirth() {
+        if (this._birth < this._birthMax) this._birth++;
     }
 
     reset() {
@@ -484,7 +499,9 @@ class Leaf {
     }
 
     size() {
-        return Math.floor(this._size * this._life / this._origin_life);
+        const lifeScale = this._life / this._origin_life;
+        const birthScale = this._birth / this._birthMax;
+        return Math.floor(this._size * lifeScale * birthScale);
     }
 
     color() {
@@ -517,6 +534,8 @@ class Leaf {
             life: this._life,
             originLife: this._origin_life,
             size: this._size,
+            birth: this._birth,
+            birthMax: this._birthMax,
         };
     }
 
@@ -531,6 +550,10 @@ class Leaf {
         this._life = d.life;
         if (typeof d.originLife === 'number' && d.originLife > 0) this._origin_life = d.originLife;
         if (typeof d.size === 'number') this._size = d.size;
+        if (typeof d.birthMax === 'number' && d.birthMax > 0) this._birthMax = d.birthMax;
+        if (typeof d.birth === 'number') {
+            this._birth = Math.max(0, Math.min(this._birthMax, d.birth));
+        }
         return true;
     }
 }
@@ -674,6 +697,7 @@ class Flower {
             if (this.leaf[i].color() > 0) continue;
 
             this.leaf[i].reset();
+            this.leaf[i].playBirth();
             for (let leaf of leafMap[this.index]) {
                 let right_flower = Math.floor(leaf[1] / 10);
                 let right_leaf = leaf[1] % 10;
@@ -816,6 +840,12 @@ class DaisyGame {
         for (let i = 0; i < N; i++) this._addLeafTable.push(i, i);
         this._addLeafTable.sort(() => Math.random() - 0.5);
         this._addLeafIndex = 0;
+
+        // Play the birth animation on every initial leaf so the level
+        // starts with daisies blooming in instead of popping in fully grown.
+        this._flowerArr.forEach(f => {
+            f.leaf.forEach(l => l.playBirth());
+        });
     }
 
     getFlowers() {
@@ -1158,12 +1188,12 @@ class DaisyGame {
     _reduceLeaf() {
         this._flowerArr.forEach(f => {
             f.leaf.forEach(l => {
+                l.advanceBirth();
                 if (!l.isAlive()) {
                     l.reduceSize();
                 }
             });
         });
-
     }
 
     _addLeaf() {
@@ -2126,16 +2156,18 @@ class DrawEngine {
             if (!palette)
                 continue;
             const lifeRatio = leafSize / small_radius;
-            const length = small_radius * 2.4 * lifeRatio;
-            const width = small_radius * 1.5 * lifeRatio;
+            // Bigger petals + position closer to the center so the inner tip tucks
+            // under the (now smaller) yellow disc — that's how a real daisy reads.
+            const length = small_radius * 3.4 * lifeRatio;
+            const width = small_radius * 1.9 * lifeRatio;
             const angleDeg = 60 * i;
             const radians = (angleDeg * Math.PI) / 180;
-            const distance = flower.radius + small_radius;
+            const distance = flower.radius;
             const px = flower.x + Math.cos(radians) * distance;
             const py = flower.y + Math.sin(radians) * distance;
             this._drawPetal(px, py, radians, length, width, palette);
         }
-        // Yellow daisy disc (#2).
+        // Smaller yellow daisy disc on top of the petal inner tips.
         this._drawDaisyCenter(flower.x, flower.y, flower.radius, flower.direction());
     }
     _drawPetal(cx, cy, angleRad, length, width, palette) {
@@ -2165,22 +2197,24 @@ class DrawEngine {
         bufCtx.fill();
         bufCtx.restore();
     }
-    // Painted daisy center — yellow/orange radial gradient + rotation arrow
-    // (clockwise or counter-clockwise depending on the flower's direction).
+    // Painted daisy center — yellow/orange radial gradient + rotation arrow.
+    // The disc renders smaller than the flower's hit radius so petals dominate
+    // the visual mass (more like a real daisy).
     _drawDaisyCenter(cx, cy, r, direction = 1) {
+        const discR = r * 0.6;
         bufCtx.save();
         // White cushion ring behind the disc to lift it off the petals.
         bufCtx.fillStyle = "rgba(255,255,255,0.85)";
         bufCtx.beginPath();
-        bufCtx.arc(cx, cy, r * 1.05, 0, Math.PI * 2);
+        bufCtx.arc(cx, cy, discR * 1.08, 0, Math.PI * 2);
         bufCtx.fill();
-        const grad = bufCtx.createRadialGradient(cx - r * 0.3, cy - r * 0.35, r * 0.1, cx, cy, r);
+        const grad = bufCtx.createRadialGradient(cx - discR * 0.3, cy - discR * 0.35, discR * 0.1, cx, cy, discR);
         grad.addColorStop(0.0, "#FFF1A8");
         grad.addColorStop(0.55, "#FFC83C");
         grad.addColorStop(1.0, "#D67B0E");
         bufCtx.fillStyle = grad;
         bufCtx.beginPath();
-        bufCtx.arc(cx, cy, r * 0.95, 0, Math.PI * 2);
+        bufCtx.arc(cx, cy, discR, 0, Math.PI * 2);
         bufCtx.fill();
         // Outline for definition.
         bufCtx.lineWidth = 1.2;
@@ -2189,12 +2223,11 @@ class DrawEngine {
         // Sheen.
         bufCtx.fillStyle = "rgba(255,255,255,0.45)";
         bufCtx.beginPath();
-        bufCtx.ellipse(cx - r * 0.35, cy - r * 0.4, r * 0.3, r * 0.18, -0.4, 0, Math.PI * 2);
+        bufCtx.ellipse(cx - discR * 0.35, cy - discR * 0.4, discR * 0.32, discR * 0.18, -0.4, 0, Math.PI * 2);
         bufCtx.fill();
         bufCtx.restore();
-        // Rotation arrow showing how the petals will move on tap. CCW flowers
-        // are drawn by horizontally mirroring the CW arrow.
-        this._drawRotationArrow(cx, cy, r, direction);
+        // Rotation arrow scaled to the smaller disc.
+        this._drawRotationArrow(cx, cy, discR, direction);
     }
     // Rotation indicator drawn inside the daisy center disc.
     // CW: ~180° arc across the top half (9 o'clock → 12 → 3), arrow tip

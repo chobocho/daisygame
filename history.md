@@ -561,7 +561,47 @@ target(L)  = 50 * L                                      // L1:50, L100:5000
 - 기존 "puzzle does not auto-refill" → "puzzle auto-refills cleared flowers" (정반대로 검증)
 - 기존 "puzzle going non-playable → GAME_OVER" → "puzzle stays in PLAY when momentarily non-playable (board re-seeds)"
 
-## 21. 후속 후보
+## 21. 데이지 비주얼 비례 보강 + 잎 생성 애니메이션
+
+피드백: "꽃잎이 좀더 커지고 가운데 원이 좀 작아져야 더 데이지 꽃 같아 보임. 꽃잎 생성 애니메이션도 보강해."
+
+### 21.1 비례 (`draw_engine.ts`)
+
+| 항목 | 이전 | 이후 |
+|---|---|---|
+| 꽃잎 길이 | `small_radius * 2.4` (≈24) | `small_radius * 3.4` (≈34) |
+| 꽃잎 너비 | `small_radius * 1.5` (≈15) | `small_radius * 1.9` (≈19) |
+| 꽃잎 중심 거리 | `flower.radius + small_radius` (≈40) | `flower.radius` (≈30) |
+| 디스크 반경 (시각) | `r * 0.95` (≈28.5) | `r * 0.6` (≈18) |
+| 쿠션 링 반경 | `r * 1.05` (≈31.5) | `discR * 1.08` (≈19.4) |
+| 회전 화살표 기준 | `r` 전체 | `discR` (작아진 디스크) |
+
+꽃잎의 inner tip이 디스크 안쪽으로 밀려들어가 시각적으로 "디스크 밑에 꽂혀 있는" 진짜 데이지 느낌. 히트박스(`flower.radius`)는 그대로.
+
+### 21.2 잎 생성 애니메이션 (`Leaf` + 호출부)
+
+- `Leaf`에 `_birth` (0..`_birthMax=8`) 카운터 추가
+  - 생성자: `_birth = _birthMax` (즉시 풀 사이즈, 기존 코드 호환)
+  - `playBirth()` — 0으로 초기화하여 grow-in 애니메이션 시작
+  - `advanceBirth()` — 매 호출 시 1 증가 (cap)
+  - `size()`가 `lifeScale × birthScale`로 계산 → birth 단계엔 작게, 자라면서 풀 사이즈
+- `Flower.addLeaf` — 새 잎에 `reset()` 직후 `playBirth()` 호출
+- `DaisyGame._init_flower` 끝에 모든 잎 `playBirth()` → 레벨 시작 시 일제히 펴지는 인트로
+- `DaisyGame._reduceLeaf` 매 틱 모든 잎 `advanceBirth()` 호출
+- `Leaf.serialize/restore`에 `birth` / `birthMax` 포함 → resume 시 애니메이션 단계 보존
+
+### 21.3 테스트 (118건, +5)
+
+Leaf 신규:
+- 생성자 직후 size = radius (애니메이션 없음, 기존 동작 보존)
+- `playBirth()` 직후 size < radius
+- `advanceBirth()` 반복 시 size가 단조 증가 + 최종 풀 사이즈 도달
+- `reset()` 단독으로는 birth 미트리거 (size 그대로)
+- `serialize → restore`가 birth 단계 보존
+
+기존 통과 케이스(예: "Leaf reset rotates color and restores life")도 그대로 통과.
+
+## 22. 후속 후보
 
 - 남은 JS 파일들도 점진적으로 .ts로 이식 (현재는 ambient 선언으로 우회 중)
 - `flower.js` / `leaf.js` 인덱스 0–6 / 1–6 매핑을 자료구조로 분리해 가독성 정리

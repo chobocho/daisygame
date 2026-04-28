@@ -118,6 +118,12 @@ class DaisyGame {
         for (let i = 0; i < N; i++) this._addLeafTable.push(i, i);
         this._addLeafTable.sort(() => Math.random() - 0.5);
         this._addLeafIndex = 0;
+
+        // Play the birth animation on every initial leaf so the level
+        // starts with daisies blooming in instead of popping in fully grown.
+        this._flowerArr.forEach(f => {
+            f.leaf.forEach(l => l.playBirth());
+        });
     }
 
     getFlowers() {
@@ -460,12 +466,12 @@ class DaisyGame {
     _reduceLeaf() {
         this._flowerArr.forEach(f => {
             f.leaf.forEach(l => {
+                l.advanceBirth();
                 if (!l.isAlive()) {
                     l.reduceSize();
                 }
             });
         });
-
     }
 
     _addLeaf() {

@@ -9,6 +9,21 @@ class Leaf {
         this._size = radius;
         this._origin_life = 15;
         this._life = 15;
+        // Birth animation: a freshly placed leaf grows from 0 to full size
+        // over _birthMax ticks. Constructor leaves start fully grown so
+        // existing code paths and tests don't see a transient zero size.
+        this._birthMax = 8;
+        this._birth = this._birthMax;
+    }
+
+    playBirth() {
+        // Trigger the grow-in animation. Caller (Flower.addLeaf or
+        // DaisyGame._init_flower) decides when to play it.
+        this._birth = 0;
+    }
+
+    advanceBirth() {
+        if (this._birth < this._birthMax) this._birth++;
     }
 
     reset() {
@@ -18,7 +33,9 @@ class Leaf {
     }
 
     size() {
-        return Math.floor(this._size * this._life / this._origin_life);
+        const lifeScale = this._life / this._origin_life;
+        const birthScale = this._birth / this._birthMax;
+        return Math.floor(this._size * lifeScale * birthScale);
     }
 
     color() {
@@ -51,6 +68,8 @@ class Leaf {
             life: this._life,
             originLife: this._origin_life,
             size: this._size,
+            birth: this._birth,
+            birthMax: this._birthMax,
         };
     }
 
@@ -65,6 +84,10 @@ class Leaf {
         this._life = d.life;
         if (typeof d.originLife === 'number' && d.originLife > 0) this._origin_life = d.originLife;
         if (typeof d.size === 'number') this._size = d.size;
+        if (typeof d.birthMax === 'number' && d.birthMax > 0) this._birthMax = d.birthMax;
+        if (typeof d.birth === 'number') {
+            this._birth = Math.max(0, Math.min(this._birthMax, d.birth));
+        }
         return true;
     }
 }

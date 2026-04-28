@@ -136,6 +136,7 @@ class Flower {
             if (this.leaf[i].color() > 0) continue;
 
             this.leaf[i].reset();
+            this.leaf[i].playBirth();
             for (let leaf of leafMap[this.index]) {
                 let right_flower = Math.floor(leaf[1] / 10);
                 let right_leaf = leaf[1] % 10;

@@ -889,19 +889,21 @@ class DrawEngine {
       if (!palette) continue;
 
       const lifeRatio = leafSize / small_radius;
-      const length = small_radius * 2.4 * lifeRatio;
-      const width = small_radius * 1.5 * lifeRatio;
+      // Bigger petals + position closer to the center so the inner tip tucks
+      // under the (now smaller) yellow disc — that's how a real daisy reads.
+      const length = small_radius * 3.4 * lifeRatio;
+      const width = small_radius * 1.9 * lifeRatio;
 
       const angleDeg = 60 * i;
       const radians = (angleDeg * Math.PI) / 180;
-      const distance = flower.radius + small_radius;
+      const distance = flower.radius;
       const px = flower.x + Math.cos(radians) * distance;
       const py = flower.y + Math.sin(radians) * distance;
 
       this._drawPetal(px, py, radians, length, width, palette);
     }
 
-    // Yellow daisy disc (#2).
+    // Smaller yellow daisy disc on top of the petal inner tips.
     this._drawDaisyCenter(flower.x, flower.y, flower.radius, flower.direction());
   }
 
@@ -946,23 +948,25 @@ class DrawEngine {
     bufCtx.restore();
   }
 
-  // Painted daisy center — yellow/orange radial gradient + rotation arrow
-  // (clockwise or counter-clockwise depending on the flower's direction).
+  // Painted daisy center — yellow/orange radial gradient + rotation arrow.
+  // The disc renders smaller than the flower's hit radius so petals dominate
+  // the visual mass (more like a real daisy).
   private _drawDaisyCenter(cx: number, cy: number, r: number, direction: number = 1): void {
+    const discR = r * 0.6;
     bufCtx.save();
     // White cushion ring behind the disc to lift it off the petals.
     bufCtx.fillStyle = "rgba(255,255,255,0.85)";
     bufCtx.beginPath();
-    bufCtx.arc(cx, cy, r * 1.05, 0, Math.PI * 2);
+    bufCtx.arc(cx, cy, discR * 1.08, 0, Math.PI * 2);
     bufCtx.fill();
 
-    const grad = bufCtx.createRadialGradient(cx - r * 0.3, cy - r * 0.35, r * 0.1, cx, cy, r);
+    const grad = bufCtx.createRadialGradient(cx - discR * 0.3, cy - discR * 0.35, discR * 0.1, cx, cy, discR);
     grad.addColorStop(0.0, "#FFF1A8");
     grad.addColorStop(0.55, "#FFC83C");
     grad.addColorStop(1.0, "#D67B0E");
     bufCtx.fillStyle = grad;
     bufCtx.beginPath();
-    bufCtx.arc(cx, cy, r * 0.95, 0, Math.PI * 2);
+    bufCtx.arc(cx, cy, discR, 0, Math.PI * 2);
     bufCtx.fill();
 
     // Outline for definition.
@@ -973,13 +977,12 @@ class DrawEngine {
     // Sheen.
     bufCtx.fillStyle = "rgba(255,255,255,0.45)";
     bufCtx.beginPath();
-    bufCtx.ellipse(cx - r * 0.35, cy - r * 0.4, r * 0.3, r * 0.18, -0.4, 0, Math.PI * 2);
+    bufCtx.ellipse(cx - discR * 0.35, cy - discR * 0.4, discR * 0.32, discR * 0.18, -0.4, 0, Math.PI * 2);
     bufCtx.fill();
     bufCtx.restore();
 
-    // Rotation arrow showing how the petals will move on tap. CCW flowers
-    // are drawn by horizontally mirroring the CW arrow.
-    this._drawRotationArrow(cx, cy, r, direction);
+    // Rotation arrow scaled to the smaller disc.
+    this._drawRotationArrow(cx, cy, discR, direction);
   }
 
   // Rotation indicator drawn inside the daisy center disc.
