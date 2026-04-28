@@ -79,6 +79,7 @@ interface DaisyGameLike {
   getFlowers(): FlowerLike[];
   mode(): number;
   timerSeconds(): number;
+  timerSecondsFloat(): number;
   puzzleLevel(): number;
   puzzleProgress(): PuzzleProgressLike | null;
 }

@@ -436,6 +436,18 @@ class DaisyGame {
         return 0;
     }
 
+    // Same as timerSeconds() but fractional — used by the puzzle petal-stack
+    // timer to drive a smooth fall animation between integer-second steps.
+    timerSecondsFloat() {
+        if (this._mode === this.MODE_ARCADE) {
+            return Math.max(0, this._timerTicks * 30 / 1000);
+        }
+        if (this._mode === this.MODE_PUZZLE && this.isPlayState()) {
+            return Math.max(0, this._timerTicks * 30 / 1000);
+        }
+        return 0;
+    }
+
     pause() {
         if (this._state !== this.PLAY_STATE) {
             return;

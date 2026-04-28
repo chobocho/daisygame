@@ -815,7 +815,66 @@ per-pair 공식:
 - 기존 90/30 시간 검증 → 60으로 갱신
 - 퍼즐 막힘 직후 빈 슬롯이 채워지고, 살아 있는 잎(fingerprint)은 보존 (보드 전체 리셋 안 일어남)
 
-## 28. 후속 후보
+## 28. 퍼즐 모드 좌측 세로 꽃잎 스택 타이머
+
+피드백 1차: "퍼즐모드에서도 아케이드 모드처럼 시간이 나와야함."
+
+피드백 2차: "스코어랑 시간이 겹쳐 보여. 퍼즐 모드에서 시간은 좌측에 세로로 꽃잎을 쌓아두고 하나씩 떨어지는 효과로 하자. 좌측 하단에 숫자로도 작게 표시되고."
+
+### 28.1 1차 시도와 한계
+
+`_drawTimer()`는 `mode() !== 0`이면 즉시 return — 퍼즐에서 시간이 아예 안 그려지고 있었음. 우상단(`x=380, y=18/44`)에 `bold 22px` 타이머를 추가했더니 동일 영역의 `_drawScoreHud` "SCORE" 라벨/숫자와 정확히 겹쳤음.
+
+### 28.2 시각 디자인: 세로 꽃잎 스택
+
+12장의 꽃잎(`COLOR_CYCLE = [2, 5, 4, 6, 7, 3]`로 색상 순환)을 좌측 세로(`x=24, y=92~`)에 22px 간격으로 쌓고, 매 5초마다(`SEC_PER_PETAL = totalSec / 12`) 맨 위 한 장이 낙하. 낙하 단계는 자기 5초 윈도우 진입과 동시에 시작해 윈도우 종료 시 사라짐:
+
+```ts
+const dropY = topProg * topProg * 36;          // ease-in 추락
+const driftX = Math.sin(topProg * 2.4) * 6;    // 좌우 흔들림
+const rot = topProg * 0.7;                     // 살짝 회전
+bufCtx.globalAlpha = Math.max(0, 1 - topProg * topProg);  // ease-out 페이드
+```
+
+기존 `_drawPetal(cx, cy, angleRad, length, width, palette)` 헬퍼를 그대로 재활용 — 게임 내 꽃잎과 동일한 베지어 패스 + 그라데이션 + 흰 sheen이라 보드의 꽃잎과 톤이 자연스럽게 이어짐.
+
+`displayedCount = ceil(secF / SEC_PER_PETAL)` 으로 가시 개수를 결정하고, `topProg`만 fractional. 즉 12장 정적 + 1장 애니메이션이 아니라 (displayedCount-1)장 정적 + 1장이 자기 윈도우 안에서 진행률 0→1로 진행 — 정수 초마다 점프하지 않고 매 틱(30ms)마다 부드럽게 이동.
+
+좌측 하단(`x=10, y=580`)에 작은 `bold 14px M:SS` 텍스트도 같이 표시. 10초 이하면 `#FF5050` 빨강.
+
+### 28.3 fractional 시간 노출
+
+기존 `timerSeconds()`는 `Math.ceil(_timerTicks * 30 / 1000)` — 정수 초로 스냅. 부드러운 낙하 애니메이션을 위해 `daisygame.js`에 천장 함수를 빼고 그대로 반환하는 `timerSecondsFloat()`을 추가, `globals.d.ts`의 `DaisyGameLike` 인터페이스도 확장.
+
+```js
+timerSecondsFloat() {
+    if (this._mode === this.MODE_ARCADE) {
+        return Math.max(0, this._timerTicks * 30 / 1000);
+    }
+    if (this._mode === this.MODE_PUZZLE && this.isPlayState()) {
+        return Math.max(0, this._timerTicks * 30 / 1000);
+    }
+    return 0;
+}
+```
+
+PAUSE 진입 시 `isPlayState() === false` → 0 반환 → 일시정지 중 꽃잎이 사라지지만, 어차피 PAUSE 오버레이가 화면 전체를 덮어 가시성 차이는 없음.
+
+### 28.4 운영 사고: TypeScript 빌드 파이프라인 인지
+
+`js/draw_engine.js`를 직접 편집한 변경이 두 차례 사라졌음. 원인은 `daisygame/src/draw_engine.ts` → `tsc -p daisygame/tsconfig.json` → `js/draw_engine.js` 자동 생성 파이프라인. CLAUDE.md에는 런타임 모델만 적혀 있고 빌드 단계는 #4에서만 언급. `.ts` 소스를 편집한 뒤 `npm run build`로 컴파일하는 것이 기본 흐름. (개인 메모리에 영구 저장.)
+
+### 28.5 테스트 (142건, +5)
+
+`tests/daisygame.test.js`에 `timerSecondsFloat` 검증 추가:
+
+- `_timerTicks = 1234` → `37.02` (정확한 부동소수)
+- 한 틱 진행 시 정확히 `0.03s` 감소 — 정수 초로 스냅하는 `timerSeconds`와 차별화
+- ENDLESS 모드 / 퍼즐 LEVEL_SELECT 상태에서 0
+- 퍼즐 PLAY 진입 후 양수 + `_timerTicks * 30 / 1000`과 일치
+- PAUSE 중 0 → resume 후 다시 양수 (틱 보존)
+
+## 29. 후속 후보
 
 - 남은 JS 파일들도 점진적으로 .ts로 이식 (현재는 ambient 선언으로 우회 중)
 - `flower.js` / `leaf.js` 인덱스 0–6 / 1–6 매핑을 자료구조로 분리해 가독성 정리

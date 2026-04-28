@@ -386,6 +386,60 @@ test("DaisyGame: puzzle timer expiry transitions to GAME_OVER", () => {
   assert.equal(g.isGameOverState(), true);
 });
 
+// ---------- timerSecondsFloat (drives the puzzle petal-stack animation) ----------
+
+test("DaisyGame: timerSecondsFloat is fractional and matches _timerTicks", () => {
+  const g = fresh();
+  g.start(MODE_ARCADE);
+  g._timerTicks = 1234;
+  // 1234 ticks * 30ms = 37020ms = 37.02s exactly.
+  assert.equal(g.timerSecondsFloat(), 37.02);
+});
+
+test("DaisyGame: timerSecondsFloat decrements smoothly between integer seconds", () => {
+  const g = fresh();
+  g.playPuzzleLevel(1);
+  // After playPuzzleLevel(1) the timer is 60s ≈ 2000 ticks.
+  const before = g.timerSecondsFloat();
+  g.increaseTick();
+  const after = g.timerSecondsFloat();
+  // Each tick is 30ms, so float time should drop by 0.03s — finer-grained
+  // than timerSeconds (which would still read 60 here).
+  assert.ok(Math.abs((before - after) - 0.03) < 1e-9,
+    `expected 0.03s drop, got ${before - after}`);
+  assert.equal(g.timerSeconds(), 60, "ceil-based timerSeconds still reads 60");
+});
+
+test("DaisyGame: timerSecondsFloat returns 0 outside arcade/puzzle play", () => {
+  const g = fresh();
+  // Endless: no countdown.
+  g.start(MODE_ENDLESS);
+  assert.equal(g.timerSecondsFloat(), 0);
+  // Puzzle in LEVEL_SELECT (not yet playing): also 0.
+  g.init();
+  g.start(MODE_PUZZLE);
+  assert.equal(g.timerSecondsFloat(), 0);
+});
+
+test("DaisyGame: timerSecondsFloat is positive once a puzzle level is started", () => {
+  const g = fresh();
+  g.playPuzzleLevel(1);
+  assert.ok(g.timerSecondsFloat() > 0);
+  // And it equals the float reading of _timerTicks (no ceiling).
+  assert.equal(g.timerSecondsFloat(), g._timerTicks * 30 / 1000);
+});
+
+test("DaisyGame: timerSecondsFloat freezes during pause", () => {
+  const g = fresh();
+  g.playPuzzleLevel(1);
+  g.pause();
+  // Out of PLAY state, the puzzle branch returns 0.
+  assert.equal(g.timerSecondsFloat(), 0);
+  g.start(); // resume
+  // Back in PLAY, ticks unchanged so fractional reading is the original 60s.
+  assert.ok(g.timerSecondsFloat() > 0);
+});
+
 test("DaisyGame: puzzleLevel returns 0 outside puzzle mode", () => {
   const g = fresh();
   g.start(MODE_ENDLESS);

@@ -299,6 +299,70 @@ class DrawEngine {
         bufCtx.strokeText(line2, 78, 38);
         bufCtx.fillText(line2, 78, 38);
         bufCtx.restore();
+        // Vertical petal-stack timer on the left edge. The arcade timer would
+        // collide with the score readout at top-right, so puzzle mode shows time
+        // as a stack of petals that drop one-by-one as the clock runs down, plus
+        // a small numeric M:SS in the bottom-left corner.
+        this._drawPuzzlePetalTimer(cfg.timeSeconds);
+    }
+    _drawPuzzlePetalTimer(totalSec) {
+        if (totalSec <= 0)
+            return;
+        const PETAL_COUNT = 12;
+        const SEC_PER_PETAL = totalSec / PETAL_COUNT;
+        const STACK_X = 24;
+        const STACK_TOP_Y = 92;
+        const SPACING = 22;
+        const PETAL_LEN = 22;
+        const PETAL_WID = 12;
+        // Cycle through pleasant in-game leaf colors for visual variety.
+        const COLOR_CYCLE = [2, 5, 4, 6, 7, 3];
+        const secF = this.game.timerSecondsFloat();
+        const displayedCount = Math.min(PETAL_COUNT, Math.ceil(secF / SEC_PER_PETAL));
+        if (displayedCount > 0) {
+            // Top-of-stack petal is mid-fall; its progress goes 0 (just attached)
+            // → 1 (about to drop off the bottom of its 5-sec window).
+            const topElapsed = displayedCount * SEC_PER_PETAL - secF;
+            const topProg = Math.max(0, Math.min(1, topElapsed / SEC_PER_PETAL));
+            for (let i = 0; i < displayedCount; i++) {
+                const slotFromBottom = i;
+                const py = STACK_TOP_Y + (PETAL_COUNT - 1 - slotFromBottom) * SPACING;
+                const palette = DrawEngine.PETAL_COLORS[COLOR_CYCLE[i % COLOR_CYCLE.length]];
+                if (!palette)
+                    continue;
+                const isTop = i === displayedCount - 1;
+                if (isTop && topProg > 0.001) {
+                    // Falling animation: ease-in drop with a slight horizontal drift,
+                    // gentle rotation, and ease-out fade.
+                    bufCtx.save();
+                    const dropY = topProg * topProg * 36;
+                    const driftX = Math.sin(topProg * 2.4) * 6;
+                    const rot = topProg * 0.7;
+                    bufCtx.globalAlpha = Math.max(0, 1 - topProg * topProg);
+                    this._drawPetal(STACK_X + driftX, py + dropY, rot, PETAL_LEN, PETAL_WID, palette);
+                    bufCtx.restore();
+                }
+                else {
+                    this._drawPetal(STACK_X, py, 0, PETAL_LEN, PETAL_WID, palette);
+                }
+            }
+        }
+        // Small numeric M:SS in the bottom-left, mirroring the music button on
+        // the bottom-right.
+        const sec = Math.max(0, Math.ceil(secF));
+        const m = Math.floor(sec / 60);
+        const s = sec % 60;
+        const text = m + ":" + (s < 10 ? "0" + s : "" + s);
+        bufCtx.save();
+        bufCtx.font = "bold 14px " + DrawEngine.UI_FONT;
+        bufCtx.textAlign = "left";
+        bufCtx.textBaseline = "middle";
+        bufCtx.lineWidth = 3;
+        bufCtx.strokeStyle = "rgba(0,0,0,0.65)";
+        bufCtx.fillStyle = sec <= 10 ? "#FF5050" : "#FFFFFF";
+        bufCtx.strokeText(text, 10, 580);
+        bufCtx.fillText(text, 10, 580);
+        bufCtx.restore();
     }
     // ---------- Puzzle game-over screen ----------
     _drawPuzzleGameOver() {
