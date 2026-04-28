@@ -9,22 +9,28 @@ test.beforeEach(() => _store.clear());
 
 // ---------- levelConfig ----------
 
-test("Puzzle.levelConfig: level 1 has 2 flowers, 4 colors, 90s, target 50", () => {
+test("Puzzle.levelConfig: level 1 has 2 flowers, 4 colors, 60s, target 50", () => {
   const c = Puzzle.levelConfig(1);
   assert.equal(c.level, 1);
   assert.equal(c.flowers, 2);
   assert.equal(c.colors, 4);
-  assert.equal(c.timeSeconds, 90);
+  assert.equal(c.timeSeconds, 60);
   assert.equal(c.target, 50);
 });
 
-test("Puzzle.levelConfig: level 100 has 7 flowers, 7 colors, 30s, target 5000", () => {
+test("Puzzle.levelConfig: level 100 has 7 flowers, 7 colors, 60s, target 5000", () => {
   const c = Puzzle.levelConfig(100);
   assert.equal(c.level, 100);
   assert.equal(c.flowers, 7);
   assert.equal(c.colors, 7);
-  assert.equal(c.timeSeconds, 30);
+  assert.equal(c.timeSeconds, 60);
   assert.equal(c.target, 5000);
+});
+
+test("Puzzle.levelConfig: time limit is flat 60 seconds across all levels", () => {
+  for (const lv of [1, 25, 50, 75, 99, 100]) {
+    assert.equal(Puzzle.levelConfig(lv).timeSeconds, 60, `level ${lv}`);
+  }
 });
 
 test("Puzzle.levelConfig: flower count steps up every 17 levels", () => {

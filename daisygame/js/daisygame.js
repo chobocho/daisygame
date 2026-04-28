@@ -160,10 +160,27 @@ class DaisyGame {
         this._flowerArr[flower].turn();
         this.checkCollision(flower);
         if (!this._isPlayable()) {
-            // Re-seed the board in every mode. Puzzle ends only when the
-            // per-level timer hits 0, not when a momentary deadlock occurs.
-            this._init_flower();
+            if (this._mode === this.MODE_PUZZLE) {
+                // Puzzle stays alive: just repopulate empty slots so a stuck
+                // turn turns into matchable colors within ~1s (instant fill +
+                // 8-tick birth animation = ≈240ms).
+                this._fillEmptySlots();
+            } else {
+                this._init_flower();
+            }
         }
+    }
+
+    _fillEmptySlots() {
+        this._flowerArr.forEach(f => {
+            for (let i = 0; i < 6; i++) {
+                if (f.leaf[i].color() === 0) {
+                    f.leaf[i].reset();
+                    f.leaf[i].playBirth();
+                    f._leaf_count = Math.min(6, f._leaf_count + 1);
+                }
+            }
+        });
     }
 
     _isPlayable() {

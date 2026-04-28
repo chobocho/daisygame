@@ -543,9 +543,9 @@ test("DaisyGame.restore: graceful failure when mode is non-numeric", () => {
   assert.equal(g.restore(broken), false);
 });
 
-test("DaisyGame: puzzle stays in PLAY when momentarily non-playable (board re-seeds)", () => {
+test("DaisyGame: puzzle stays in PLAY when momentarily non-playable", () => {
   // The original game-over-on-stuck branch was wrong because puzzle now
-  // refills leaves; deadlocks should reset the board, not end the game.
+  // refills leaves; deadlocks should keep playing.
   const g = fresh();
   g.playPuzzleLevel(1);
   g._isPlayable = () => false;
@@ -554,4 +554,29 @@ test("DaisyGame: puzzle stays in PLAY when momentarily non-playable (board re-se
   flowers[0].leaf[0]._life = 15;
   g.turnFlower(0);
   assert.equal(g.isPlayState(), true);
+});
+
+test("DaisyGame: puzzle deadlock fills empty slots instead of full board reset", () => {
+  const g = fresh();
+  g.playPuzzleLevel(1);
+  const flowers = g.getFlowers();
+
+  // Empty a slot we can verify gets refilled.
+  flowers[1].leaf[2]._color = 0;
+  flowers[1].leaf[2]._life = 0;
+  flowers[1]._leaf_count = 5;
+
+  // Place a fingerprint on flower 1 leaf 0 — flower 1 isn't rotated when
+  // we tap flower 0, and leaf 0 isn't touched by checkCollision's
+  // _leafMap[0] entry (which only inspects flower 1 leaf 3 for N=2).
+  flowers[1].leaf[0]._color = 6;
+  flowers[1].leaf[0]._life = 15;
+
+  g._isPlayable = () => false;
+  g.turnFlower(0);
+
+  // Empty slot got refilled.
+  assert.notEqual(flowers[1].leaf[2].color(), 0);
+  // Fingerprint preserved (no full _init_flower reset).
+  assert.equal(flowers[1].leaf[0].color(), 6);
 });

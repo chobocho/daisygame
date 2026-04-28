@@ -8,7 +8,7 @@ class Puzzle {
     // Returns the deterministic config for a level (clamped to [1, 100]).
     //   flowers: 2 → 7 in steps of 17 levels
     //   colors:  4 → 7 in steps of 33 levels
-    //   time:    90s → 30s linearly
+    //   time:    flat 60s for every level (snappy round, predictable pacing)
     //   target:  50 * level (L1 = 50, L100 = 5000)
     static levelConfig(level) {
         const L = Math.max(1, Math.min(Puzzle.MAX_LEVEL, level | 0));
@@ -16,7 +16,7 @@ class Puzzle {
             level: L,
             flowers: Math.min(7, 2 + Math.floor((L - 1) / 17)),
             colors:  Math.min(7, 4 + Math.floor((L - 1) / 33)),
-            timeSeconds: 90 - Math.floor((L - 1) * 60 / 99),
+            timeSeconds: 60,
             target: 50 * L,
         };
     }
