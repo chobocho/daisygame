@@ -1211,10 +1211,146 @@ if (this._comboCooldown > 0) {
 
 `stagePuzzlePair(g, color)` 헬퍼 — `_leafMap[0]`의 `[0, 13]` 페어를 노리고 F0 leaf 5 + F1 leaf 3에 같은 색을 심어, CW turnFlower(0) 한 번이면 매치되도록 셋업.
 
-## 32. 후속 후보
+## 32. 퍼즐 모드 자동 리필 (매 틱)
+
+피드백: 매치 후 죽음 애니메이션이 끝난 슬롯이 다음 cadence(`_addLeaf`, ~1.8s) 까지 비어 있어 퍼즐의 빠른 연쇄 플레이감을 깎는다.
+
+### 32.1 변경 (`daisygame.js`)
+
+`increaseTick`이 `MODE_PUZZLE`일 때 매 틱 `_fillEmptySlots()`를 호출. 죽어 사라진 잎이 다음 프레임 안에 새 잎으로 대체되어 콤보 윈도(33틱)와 맞물린다.
+
+`_fillEmptySlots`은 직접 `Leaf.reset(...)`이 아닌 `Flower.addLeaf(this._flowerArr)`를 호출 — `_init_flower`와 같은 매칭 색 회피 재시도 루프를 그대로 적용한다. 그래야 자동 리필이 우연히 `_leafMap` 인접 잎과 같은 색을 떨어뜨려 "공짜 즉시 매치"를 선물하는 일이 없다.
+
+특수 잎(rainbow, gold)과 죽음 애니메이션 진행 중인 잎은 `color === 0` 게이트로 자연 보존.
+
+### 32.2 모드 게이트
+
+아케이드 / 엔들리스는 기존 cadence 유지 — 빠른 자동 리필은 퍼즐의 단기 목표 달성형 플레이에서만 의미가 있고, 다른 모드에선 플레이어 스킬을 희석한다.
+
+## 33. 즉시 리필 게이트 — `_isPlayable === false`로 좁힘
+
+32에서 도입한 매 틱 `_fillEmptySlots`이 너무 공격적이었음을 확인. 매치 직후 cadence가 숨 쉴 틈도 없이 보드를 다시 채워 텐션이 사라졌다.
+
+리필을 "회전으로 매치를 만들 수 없는 진짜 stuck 상태"에만 발동하도록 게이트:
+
+```js
+if (this._mode === this.MODE_PUZZLE && !this._isPlayable()) {
+    this._fillEmptySlots();
+}
+```
+
+`_isPlayable`은 빈 슬롯이 하나라도 있는 보드를 항상 playable로 본다 → 부분적으로 빈 보드에선 cadence 경로(`_addLeaf`)가 다시 책임지고, 퍼즐의 cadence가 아케이드 / 엔들리스와 같은 호흡으로 돌아왔다.
+
+## 34. 퍼즐 구제(rescue) — `_hasMatchablePair`와 `_spawnMatchableLeaf`
+
+33의 게이트가 너무 좁다는 후속 발견:
+
+- `_isPlayable === false`는 보드가 **가득 찬** 막힘 케이스에서만 true. 그 시점엔 `_fillEmptySlots`가 어차피 no-op (빈 슬롯이 없으니까).
+- cadence 경로(`Flower.addLeaf`)는 매칭 색을 **회피**하므로, 운 나쁜 리필 연속이면 슬롯이 비어 있어도 어떤 인접 페어도 같은 색이 안 되는 "non-matchable" 상태에 빠질 수 있다. 게이트는 이를 잡지 못함.
+
+### 34.1 더 엄격한 판정: `_hasMatchablePair`
+
+`_isPlayable`보다 좁은 정의:
+
+- 와일드카드(rainbow / gold)가 보드에 있으면 즉시 true (구제 불필요).
+- 아니면 각 꽃의 살아있는 일반 색 집합을 만들고, `_leafMap` 페어들을 순회해 **두 꽃 색 집합의 교집합이 비지 않는 페어**가 하나라도 있으면 true.
+- 빈 슬롯이 있어도 매칭 색이 없으면 false — 33의 게이트와 다른 지점.
+
+### 34.2 구제 스폰: `_spawnMatchableLeaf`
+
+`_hasMatchablePair === false`일 때 `_leafMap` 경계 슬롯 중 "한쪽이 비고 다른 쪽이 살아있는 일반 색(1..7)"인 슬롯을 찾아 **상대 잎의 색을 그대로 복사**해 한 장만 심는다. CW/CCW 회전 한 번에 매칭이 성립하도록 보장.
+
+- rainbow / gold가 걸린 페어는 스킵 — 와일드카드 이벤트를 흩뜨리지 않기 위해.
+- `_placeMatchableLeaf`은 `color`, `_life`, `playBirth()`, `_leaf_count` 증가까지 한 번에 처리.
+
+### 34.3 게이트 위치
+
+`turnFlower`의 deadlock 분기는 그대로 `_fillEmptySlots`을 호출(턴 직후 회복 시나리오 — 이건 다른 문제). 새 구제 호출은 `increaseTick`에서, cadence 리필이 끝난 뒤에:
+
+```js
+if (this._mode === this.MODE_PUZZLE && !this._hasMatchablePair()) {
+    this._spawnMatchableLeaf();
+}
+```
+
+### 34.4 테스트
+
+- 부분적으로 빈 보드 + 공유 색 존재 → 구제 스폰 안 됨 (cadence가 책임)
+- 부분적으로 빈 보드 + 공유 색 없음 → 구제 스폰이 상대 색을 정확히 복사
+- 엔들리스 모드 → 같은 셋업이라도 절대 발동 안 함
+- rainbow가 보드에 있으면 구제 스킵
+- 죽음 애니메이션 중인 잎(life > 0, color === 0이 아님)은 덮어쓰지 않음
+- 가득 찬 stuck 보드 → 구제는 no-op (빈 슬롯이 없음)
+
+## 35. 퍼즐 타이머 꽃잎 트라이컬러 그라데이션
+
+피드백: 단일 코랄 hue로 채운 12-슬롯 타이머 스택이 시간 진행 신호로는 약하다.
+
+### 35.1 팔레트
+
+`DrawEngine.PUZZLE_TIMER_PALETTES`(이전엔 단일 톤)를 슬롯별 다른 hue로 사전 계산:
+
+| 슬롯 | t | 색 | 의미 |
+|---|---|---|---|
+| 0 (바닥) | 0.0 | `rgb(196, 43, 43)` 깊은 빨강 | 마지막까지 남는 꽃잎 — "시간 거의 끝" |
+| 5–6 (중간) | ≈0.5 | 거의 흰색 | 평온한 중반 |
+| 11 (꼭대기) | 1.0 | `rgb(43, 79, 196)` 깊은 파랑 | 가장 먼저 떨어지는 꽃잎 — "시간 많음" |
+
+3-stop 보간(`RED → WHITE → BLUE`). 위에서부터 떨어지므로 라운드가 진행될수록 차분한 파랑이 사라지고 빨강만 남아 자연스럽게 "calm → urgent" 컬러 시프트가 된다.
+
+각 슬롯은 단일 base RGB에서 light(50% 흰색 측), dark(60% 검정 측), outline(반투명 검정)을 동일 레시피로 파생. 클래스 로드 시점에 IIFE로 한 번 계산하므로 draw loop은 인덱싱만.
+
+### 35.2 테스트 (`draw_engine.test.js`)
+
+`PUZZLE_TIMER_PALETTES`가 컴파일된 JS에서 `DrawEngine.PUZZLE_TIMER_PALETTES`로 노출되는 점을 활용:
+
+- 길이 12, 각 슬롯에 base/light/dark/outline 모두 존재
+- 슬롯 0 base = `rgb(196, 43, 43)`, 슬롯 11 base = `rgb(43, 79, 196)`
+- 중간 슬롯(5, 6)이 near-white(모든 채널 ≥ 220)
+- 바닥은 warm-leaning(red > blue), 꼭대기는 cool-leaning(blue > red) — RGB 채널은 흰색 정점에서 비단조라 hue lean으로 검증
+- dark variant가 base의 60% (정확)
+
+## 36. 페어 점수 재밸런스 — 색별 ramp
+
+문제: 이전 점수표 `2 + (color..7).reverse()` (= 9, 8, 7, 6, 5, 4, 3 per pair, 색 1이 9 / 색 7이 3)는 퍼즐 후반의 고색(색 4–7) 매치가 너무 인색해 50-레벨대 타깃을 정시 안에 도달하기 어려웠다. 또 직관(원작이 "보기 드문 색일수록 가치가 높다"는 제스처를 보냈음)과도 어긋남.
+
+### 36.1 새 표 (`daisygame.js`)
+
+| color | 1 | 2 | 3 | 4 | 5 | 6 | 7 | rainbow | gold |
+|---|---|---|---|---|---|---|---|---|---|
+| per pair | 1 | 2 | 4 | 6 | 8 | 10 | 12 | 7 (flat) | 16 (flat) |
+
+- 색 4 이후 ramp가 가팔라짐 → 퍼즐 후반 페이오프가 실제로 의미 있게 달라짐.
+- 색 1은 1점으로 떨어뜨려 "흔한 색을 마구 회전" 전략 억제.
+- rainbow / gold는 평탄(flat) — 와일드카드는 색 가치가 아니라 "페어 만들기 기회"가 핵심이라.
+- gold 우선 규칙은 유지: gold-vs-rainbow가 만나면 gold 16점.
+
+### 36.2 콤보와의 상호작용
+
+페어 점수에만 multiplier 적용(꽃 비움 보너스 / monochrome 보너스는 그대로). 새 표 위에서:
+
+- 색 7 페어 2번째 매치: `floor(12 × 1.2) = 14`
+- 색 7 페어 3번째 매치: `floor(12 × 1.44) = 17`
+- 콤보 중 gold 페어: `floor(16 × 1.2) = 19`
+
+도파민 곡선이 표 가팔라짐과 자연 합산.
+
+### 36.3 테스트
+
+기존 페어 / 콤보 / rainbow / gold 테스트를 새 ramp에 맞춰 갱신:
+
+- 색 1..7 ramp 배열 상수화 `[0, 1, 2, 4, 6, 8, 10, 12]` 후 한 번에 검증
+- 색-1 = 1점, 색-7 = 12점 단독 케이스
+- 색-3 단일 페어 = 4점
+- rainbow flat = 7점, gold flat = 16점 케이스
+- 콤보 수학: 색-3 base 4 → ×1.2 = `floor(4.8) = 4` (다음 단계까지는 차이가 없을 수 있음을 확인)
+- 색-5 base 8, gold base 16에서의 콤보 누적
+
+## 37. 후속 후보
 
 - 남은 JS 파일들도 점진적으로 .ts로 이식 (현재는 ambient 선언으로 우회 중)
 - `flower.js` / `leaf.js` 인덱스 0–6 / 1–6 매핑을 자료구조로 분리해 가독성 정리
 - 콜아웃 텍스트 / 보너스 점수 테이블의 매직 넘버를 상수화
 - 모바일 터치 제스처(스와이프로 회전 등) 검토
 - 황금 꽃잎이 매치되어 사라질 때 별도의 sparkle / coin-pop 이펙트
+- 퍼즐 구제 스폰에 시각 큐(잎이 들어올 때 작은 sparkle 등)로 "도움이 들어왔다" 신호
