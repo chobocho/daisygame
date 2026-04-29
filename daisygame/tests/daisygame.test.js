@@ -440,6 +440,277 @@ test("DaisyGame: timerSecondsFloat freezes during pause", () => {
   assert.ok(g.timerSecondsFloat() > 0);
 });
 
+// ---------- Golden leaf event ----------
+
+function clearBoard(g) {
+  for (const f of g.getFlowers()) {
+    for (let i = 0; i < 6; i++) {
+      f.leaf[i]._color = 0;
+      f.leaf[i]._life = 0;
+    }
+    f._leaf_count = 0;
+  }
+}
+
+function findGoldOnBoard(g) {
+  const flowers = g.getFlowers();
+  for (let f = 0; f < flowers.length; f++) {
+    for (let i = 0; i < 6; i++) {
+      if (flowers[f].leaf[i].isGolden()) return { flower: f, idx: i };
+    }
+  }
+  return null;
+}
+
+test("DaisyGame: _trySpawnGolden places a gold leaf at a _leafMap boundary slot", () => {
+  const g = fresh();
+  g.start();
+  clearBoard(g);
+  assert.equal(g._trySpawnGolden(), true);
+  const pos = findGoldOnBoard(g);
+  assert.ok(pos, "a gold leaf must exist on the board");
+  // Must be a slot named in the active leaf map (boundary between flowers).
+  const boundary = new Set();
+  for (const pairs of g._leafMap) {
+    for (const [a, b] of pairs) {
+      boundary.add(a);
+      boundary.add(b);
+    }
+  }
+  const code = pos.flower * 10 + pos.idx;
+  assert.ok(boundary.has(code), `gold at ${code} not in _leafMap boundary`);
+});
+
+test("DaisyGame: _trySpawnGolden records active state with a 2..5s lifetime", () => {
+  const g = fresh();
+  g.start();
+  clearBoard(g);
+  g._trySpawnGolden();
+  const ag = g.activeGolden();
+  assert.ok(ag, "activeGolden() should return the spawned event");
+  assert.ok(ag.ticksLeft >= 67 && ag.ticksLeft <= 167,
+    `ticksLeft ${ag.ticksLeft} not in [67, 167]`);
+  assert.equal(ag.dyingTicks, 12);
+});
+
+test("DaisyGame: a second _trySpawnGolden while active is a no-op", () => {
+  const g = fresh();
+  g.start();
+  clearBoard(g);
+  assert.equal(g._trySpawnGolden(), true);
+  const first = g.activeGolden();
+  assert.equal(g._trySpawnGolden(), false);
+  const after = g.activeGolden();
+  assert.equal(after.flower, first.flower);
+  assert.equal(after.idx, first.idx);
+});
+
+test("DaisyGame: gold prefers empty slots over transforming alive leaves", () => {
+  // Empty board → empties available everywhere → gold should land on a slot
+  // that was empty (wasEmpty=true).
+  const g = fresh();
+  g.start();
+  clearBoard(g);
+  g._trySpawnGolden();
+  assert.equal(g.activeGolden().wasEmpty, true);
+});
+
+test("DaisyGame: with no empty slots, gold transforms an existing leaf and snapshots it", () => {
+  const g = fresh();
+  g.start();
+  // Board is fully populated after start(); no empties to fill.
+  // Pre-record the existing color of slot 0,0 so we can verify revert.
+  const f0 = g.getFlowers()[0];
+  const originalColor = f0.leaf[0].color();
+  g._trySpawnGolden();
+  const ag = g.activeGolden();
+  assert.ok(ag, "gold should still spawn by transforming");
+  assert.equal(ag.wasEmpty, false);
+  // Snapshot must have captured a non-empty color so revert can restore it.
+  assert.ok(g._activeGolden.snapshot.color >= 1 && g._activeGolden.snapshot.color <= 7,
+    `snapshot.color ${g._activeGolden.snapshot.color} not a normal color`);
+  // The chosen slot is now gold.
+  const pos = { flower: ag.flower, idx: ag.idx };
+  assert.equal(g.getFlowers()[pos.flower].leaf[pos.idx].isGolden(), true);
+  // (originalColor reference kept to make the snapshot path explicit.)
+  assert.ok(originalColor >= 1 && originalColor <= 7);
+});
+
+test("DaisyGame: gold never overwrites a rainbow leaf", () => {
+  const g = fresh();
+  g.start();
+  // Force every alive boundary slot to have a rainbow neighbour scenario:
+  // place a rainbow at (0, 0) and verify gold lands somewhere else.
+  g.getFlowers()[0].leaf[0].setRainbow();
+  g._trySpawnGolden();
+  const ag = g.activeGolden();
+  assert.ok(ag);
+  assert.ok(!(ag.flower === 0 && ag.idx === 0), "gold must not replace the rainbow");
+});
+
+test("DaisyGame: gold expiry on an emptied slot clears it back to empty", () => {
+  const g = fresh();
+  g.start();
+  clearBoard(g);
+  g._trySpawnGolden();
+  const ag = g.activeGolden();
+  const flowers = g.getFlowers();
+  const before = flowers[ag.flower]._leaf_count;
+  g._expireGolden();
+  assert.equal(g.activeGolden(), null);
+  assert.equal(flowers[ag.flower].leaf[ag.idx].color(), 0);
+  assert.equal(flowers[ag.flower]._leaf_count, before - 1,
+    "leaf count should decrement when an empty-fill gold expires");
+});
+
+test("DaisyGame: gold expiry on a transformed leaf restores the original color", () => {
+  const g = fresh();
+  g.start();
+  // Full board → forces transform path.
+  g._trySpawnGolden();
+  const ag = g.activeGolden();
+  const snap = g._activeGolden.snapshot;
+  const flowers = g.getFlowers();
+  g._expireGolden();
+  assert.equal(g.activeGolden(), null);
+  assert.equal(flowers[ag.flower].leaf[ag.idx].color(), snap.color,
+    "transformed gold must revert to the snapshot color");
+  assert.equal(flowers[ag.flower].leaf[ag.idx]._life, snap.life);
+});
+
+test("DaisyGame: gold lifecycle ticks down inside increaseTick", () => {
+  const g = fresh();
+  g.start();
+  clearBoard(g);
+  // Force the spawn path inside increaseTick by zeroing the cooldown.
+  g._goldenCooldown = 0;
+  g.increaseTick();
+  const before = g.activeGolden();
+  assert.ok(before, "increaseTick should have spawned the gold event");
+  // Each tick decrements ticksLeft.
+  g.increaseTick();
+  const after = g.activeGolden();
+  assert.equal(after.ticksLeft, before.ticksLeft - 1);
+});
+
+test("DaisyGame: gold expires automatically when ticksLeft hits zero", () => {
+  const g = fresh();
+  g.start();
+  clearBoard(g);
+  // Spawn directly so the empty-slot path is exercised — calling
+  // increaseTick first would let the refill loop repopulate the board
+  // before the gold cooldown branch runs.
+  g._trySpawnGolden();
+  const ag = g.activeGolden();
+  assert.equal(ag.wasEmpty, true);
+  const slot = { flower: ag.flower, idx: ag.idx };
+  g._activeGolden.ticksLeft = 1;
+  g.increaseTick();
+  assert.equal(g.activeGolden(), null);
+  assert.equal(g.getFlowers()[slot.flower].leaf[slot.idx].isGolden(), false);
+});
+
+test("DaisyGame: a matched gold pair scores 9 points", () => {
+  const g = fresh();
+  g.start();
+  const flowers = g.getFlowers();
+  for (let f = 0; f < flowers.length; f++) {
+    for (let i = 0; i < 6; i++) {
+      flowers[f].leaf[i]._color = 0;
+      flowers[f].leaf[i]._life = 0;
+    }
+  }
+  flowers[0].set_direction(1);
+  // _leafMap[0] entry [0, 13] pairs flower 0 leaf 0 with flower 1 leaf 3.
+  // After CW turn, leaf 5 moves into slot 0; place gold there.
+  flowers[0].leaf[5].setGolden();
+  flowers[0].leaf[5]._life = 15;
+  flowers[1].leaf[3]._color = 4;
+  flowers[1].leaf[3]._life = 15;
+  g.turnFlower(0);
+  assert.equal(g.score(), 9, "gold pair must award exactly 9 points");
+});
+
+test("DaisyGame: gold-vs-rainbow match still scores 9 (gold wins)", () => {
+  const g = fresh();
+  g.start();
+  const flowers = g.getFlowers();
+  for (let f = 0; f < flowers.length; f++) {
+    for (let i = 0; i < 6; i++) {
+      flowers[f].leaf[i]._color = 0;
+      flowers[f].leaf[i]._life = 0;
+    }
+  }
+  flowers[0].set_direction(1);
+  flowers[0].leaf[5].setGolden();
+  flowers[0].leaf[5]._life = 15;
+  flowers[1].leaf[3].setRainbow();
+  g.turnFlower(0);
+  assert.equal(g.score(), 9);
+});
+
+test("DaisyGame: matching the active gold clears _activeGolden immediately", () => {
+  const g = fresh();
+  g.start();
+  const flowers = g.getFlowers();
+  for (let f = 0; f < flowers.length; f++) {
+    for (let i = 0; i < 6; i++) {
+      flowers[f].leaf[i]._color = 0;
+      flowers[f].leaf[i]._life = 0;
+    }
+  }
+  flowers[0].set_direction(1);
+  flowers[0].leaf[5].setGolden();
+  flowers[0].leaf[5]._life = 15;
+  flowers[1].leaf[3]._color = 4;
+  flowers[1].leaf[3]._life = 15;
+  // Pretend this is the active event so checkCollision can see the slot.
+  // After CW turn, slot 5 moves to slot 0; the active record still points
+  // at the ORIGINAL slot we placed gold at (slot 5 prior to the rotation).
+  // That slot is no longer gold post-turn, but the gold IS at the matched
+  // slot 0; verify the match logic clears the record either way.
+  g._activeGolden = { flower: 0, idx: 0, ticksLeft: 100, wasEmpty: true, snapshot: null };
+  g.turnFlower(0);
+  assert.equal(g.activeGolden(), null,
+    "matching the gold slot must clear _activeGolden");
+});
+
+test("DaisyGame: _isPlayable returns true while a gold leaf is on the board", () => {
+  const g = fresh();
+  g.start();
+  // Build a fully-monochrome board (would normally be unplayable) but stamp
+  // a gold leaf on top — gold is a wildcard so the board stays playable.
+  for (const f of g.getFlowers()) {
+    for (let i = 0; i < 6; i++) {
+      f.leaf[i]._color = 1;
+      f.leaf[i]._life = 15;
+    }
+  }
+  // Even with a single shared color, multiple matchable pairs already exist;
+  // explicitly verify the gold short-circuit by also placing a gold leaf.
+  g.getFlowers()[0].leaf[0].setGolden();
+  assert.equal(g._isPlayable(), true);
+});
+
+test("DaisyGame: init/playPuzzleLevel reset the gold cooldown and active record", () => {
+  const g = fresh();
+  g.start();
+  clearBoard(g);
+  g._trySpawnGolden();
+  assert.ok(g.activeGolden());
+  g.init();
+  assert.equal(g.activeGolden(), null);
+  assert.equal(g._goldenCooldown, g.GOLDEN_INTERVAL_TICKS);
+
+  g.playPuzzleLevel(1);
+  // Force a spawn, then start another puzzle level — the new round must clear it.
+  clearBoard(g);
+  g._trySpawnGolden();
+  assert.ok(g.activeGolden());
+  g.playPuzzleLevel(1);
+  assert.equal(g.activeGolden(), null);
+});
+
 test("DaisyGame: puzzleLevel returns 0 outside puzzle mode", () => {
   const g = fresh();
   g.start(MODE_ENDLESS);

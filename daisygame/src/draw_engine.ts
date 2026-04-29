@@ -1040,6 +1040,29 @@ class DrawEngine {
         continue;
       }
 
+      if (leaf.isGolden()) {
+        // Gold petal — usually drawn at full size during its 2..5s life.
+        // The active-golden record from DaisyGame tells us if we're inside
+        // the trailing dying window, in which case we play a grow + fade
+        // identical in feel to the rainbow death animation.
+        const ag = this.game.activeGolden();
+        const birthFrac = leaf.get_birth_ratio();
+        let scale = birthFrac;
+        let alpha = 1;
+        if (ag &&
+            ag.flower === flower.index && ag.idx === i &&
+            ag.ticksLeft <= ag.dyingTicks && ag.dyingTicks > 0) {
+          const dyingProg = 1 - Math.max(0, ag.ticksLeft) / ag.dyingTicks;
+          scale = birthFrac * (1 + dyingProg * 0.7);
+          alpha = 1 - dyingProg;
+        }
+        if (scale <= 0 || alpha <= 0) continue;
+        const length = small_radius * 3.4 * scale;
+        const width = small_radius * 1.9 * scale;
+        this._drawGoldenPetal(px, py, radians, length, width, alpha);
+        continue;
+      }
+
       const leafSize = leaf.size();
       if (leafSize === 0) continue;
 
@@ -1144,6 +1167,52 @@ class DrawEngine {
     bufCtx.beginPath();
     bufCtx.ellipse(halfL * 0.45, -halfW * 0.35, halfL * 0.22, halfW * 0.22, 0, 0, Math.PI * 2);
     bufCtx.fillStyle = "rgba(255, 255, 255, 0.55)";
+    bufCtx.fill();
+
+    bufCtx.restore();
+  }
+
+  // Golden petal — rich amber gradient with a sparkle highlight, used for
+  // the timed 9-point bonus event. Caller controls overall alpha for the
+  // grow-and-fade expiry animation.
+  private _drawGoldenPetal(
+    cx: number,
+    cy: number,
+    angleRad: number,
+    length: number,
+    width: number,
+    alpha: number,
+  ): void {
+    bufCtx.save();
+    bufCtx.globalAlpha = Math.max(0, Math.min(1, alpha));
+    bufCtx.translate(cx, cy);
+    bufCtx.rotate(angleRad);
+
+    const halfL = length / 2;
+    const halfW = width / 2;
+
+    const grad = bufCtx.createLinearGradient(-halfL, 0, halfL, 0);
+    grad.addColorStop(0.0, "#8B6508"); // deep amber at the inner tip
+    grad.addColorStop(0.45, "#FFC83C");
+    grad.addColorStop(0.75, "#FFE56B");
+    grad.addColorStop(1.0, "#FFF6A8"); // pale-yellow at the outer tip
+
+    bufCtx.beginPath();
+    bufCtx.moveTo(-halfL, 0);
+    bufCtx.bezierCurveTo(-halfL * 0.4, -halfW * 1.05, halfL * 0.55, -halfW, halfL, 0);
+    bufCtx.bezierCurveTo(halfL * 0.55, halfW, -halfL * 0.4, halfW * 1.05, -halfL, 0);
+    bufCtx.closePath();
+
+    bufCtx.fillStyle = grad;
+    bufCtx.fill();
+    bufCtx.lineWidth = 1.2;
+    bufCtx.strokeStyle = "rgba(120, 80, 0, 0.65)";
+    bufCtx.stroke();
+
+    // Sparkle highlight near the outer tip.
+    bufCtx.beginPath();
+    bufCtx.ellipse(halfL * 0.45, -halfW * 0.35, halfL * 0.24, halfW * 0.22, 0, 0, Math.PI * 2);
+    bufCtx.fillStyle = "rgba(255, 255, 255, 0.65)";
     bufCtx.fill();
 
     bufCtx.restore();

@@ -874,9 +874,121 @@ PAUSE 진입 시 `isPlayState() === false` → 0 반환 → 일시정지 중 꽃
 - 퍼즐 PLAY 진입 후 양수 + `_timerTicks * 30 / 1000`과 일치
 - PAUSE 중 0 → resume 후 다시 양수 (틱 보존)
 
-## 29. 후속 후보
+## 29. 황금 꽃잎 이벤트 (9점, 2~5초)
+
+피드백: "매 8초마다 2-5초간 잠시 나타났다가 사라지는 황금 꽃잎 이벤트를 만들어줘. 반드시 없앨수 있는 인접 두 꽃 사이에 생기고, 점수는 9점이야. 만약 꽃잎을 만들 자리가 없으면 기존 꽃잎 색상을 황금빛으로 바꾸고 시간내 못없애면 원래 색으로 바꿔주오. 황금 꽃잎은 사라질때 이펙트는 꽃잎이 커지면서 사라지게 해줘."
+
+### 29.1 색상 9 = 황금 와일드카드
+
+레인보우(8)와 같은 패턴 — `Leaf.setGolden() / isGolden()`. `_color === 9`. 와일드카드 동작도 동일하게 `checkCollision`이 `ll.isGolden() || rl.isGolden()`을 매치 조건에 추가. 점수는 페어당 **9점** 고정 (rainbow 8점, 일반 색상 2 + 1..7과 차별화).
+
+레인보우와 황금이 동시에 페어 매치되면 황금 점수가 우선 (`isGolden ? 9 : isRainbow ? 8 : 2 + bonus`).
+
+### 29.2 라이프사이클 (`daisygame.js`)
+
+```js
+this.GOLDEN_INTERVAL_TICKS = 267; // ≈ 8s
+this.GOLDEN_LIFE_MIN_TICKS = 67;  // ≈ 2s
+this.GOLDEN_LIFE_MAX_TICKS = 167; // ≈ 5s
+this.GOLDEN_DYING_TICKS = 12;     // ≈ 360ms grow + fade tail
+```
+
+`increaseTick`에 레인보우 쿨다운 직후 추가:
+
+```js
+this._goldenCooldown--;
+if (this._goldenCooldown <= 0 && this._activeGolden === null) {
+    this._trySpawnGolden();
+    this._goldenCooldown = this.GOLDEN_INTERVAL_TICKS;
+}
+if (this._activeGolden !== null) {
+    this._activeGolden.ticksLeft--;
+    if (this._activeGolden.ticksLeft <= 0) {
+        this._expireGolden();
+    }
+}
+```
+
+활성 황금이 있으면 새로 스폰하지 않음 — 화면에 동시 1개만.
+
+### 29.3 스폰 위치: `_leafMap` 경계 슬롯만
+
+"반드시 없앨수 있는 인접 두 꽃 사이에" → `_collectGoldenBoundarySlots()`이 모든 `_leafMap` 페어를 순회해 양쪽 슬롯을 수집. 황금은 이 boundary 집합에서만 뽑힘 — 다른 꽃에 닿지 않는 슬롯엔 생기지 않음.
+
+선택 우선순위:
+1. **빈 슬롯(empties) 우선** — 새 꽃잎으로 채움. `wasEmpty=true`, `playBirth()` 호출, `_leaf_count++`.
+2. **빈 슬롯 없으면 변환** — `isAlive() && !isRainbow() && !isGolden()`인 잎을 골라 `setGolden()`. 변환 직전 `{color, life, birth}` 스냅샷을 `_activeGolden.snapshot`에 저장.
+3. 둘 다 없으면 `false` 반환 (이번 사이클은 이벤트 패스).
+
+레인보우 잎은 보호 — 황금이 레인보우를 덮어쓰지 않음.
+
+### 29.4 만료 처리
+
+```js
+_expireGolden() {
+    const { flower, idx, wasEmpty, snapshot } = this._activeGolden;
+    const l = this._flowerArr[flower].leaf[idx];
+    if (l.isGolden()) {
+        if (wasEmpty) {
+            l._color = 0;
+            l._life = 0;
+            f._leaf_count = Math.max(0, f._leaf_count - 1);
+        } else if (snapshot) {
+            l._color = snapshot.color;
+            l._life = snapshot.life;
+            l._birth = snapshot.birth;
+        }
+    }
+    this._activeGolden = null;
+}
+```
+
+`isGolden()` 가드 — 만료 전에 매치되어 이미 라이프 카운트다운 중이면 건드리지 않음. 매치 시점에 `checkCollision`이 활성 황금 슬롯 매치를 감지하면 즉시 `_activeGolden = null`로 정리.
+
+### 29.5 grow-and-fade 사라짐 이펙트
+
+마지막 `GOLDEN_DYING_TICKS = 12` 틱 동안 꽃잎이 1.0 → 1.7배로 커지면서 alpha 1 → 0으로 페이드. 레인보우 죽음 애니메이션과 동일한 공식이지만 트리거가 다름:
+- 레인보우: `!leaf.isAlive() && lifeFrac > 0` (실제 라이프 감소가 트리거)
+- 황금: `activeGolden.ticksLeft <= dyingTicks` (별도 이벤트 타이머가 트리거 — 라이프는 풀로 유지)
+
+`draw_engine.ts`에 `_drawGoldenPetal` 추가 — 베지어 path는 `_drawPetal`/`_drawRainbowPetal`과 동일, 그라데이션은 `#8B6508 → #FFC83C → #FFE56B → #FFF6A8` (인쪽 진한 호박색에서 바깥쪽 옅은 노랑). 외곽선 `rgba(120,80,0,0.65)` + 흰 sparkle 하이라이트로 광택감.
+
+`DaisyGame.activeGolden()`이 `{flower, idx, ticksLeft, dyingTicks, wasEmpty}`를 노출 — 드로우 엔진이 매 프레임 읽어 dying 윈도우 진입 여부를 판정.
+
+### 29.6 _isPlayable에 황금 단축 회로
+
+```js
+if (this._hasRainbow() || this._hasGolden()) return true;
+```
+
+레인보우와 마찬가지로 황금이 와일드카드라 보드에 한 장만 있어도 매칭 가능 → 막힘 판정에서 즉시 true 반환.
+
+### 29.7 테스트 (158건, +16)
+
+`tests/leaf.test.js`:
+- `setGolden` → color 9, alive, isRainbow false
+
+`tests/daisygame.test.js`:
+- `_trySpawnGolden`이 항상 `_leafMap` boundary 슬롯에 스폰
+- `activeGolden()`의 `ticksLeft`가 67..167 범위 (2~5초)
+- 활성 중 추가 스폰 무시 (no-op)
+- 빈 슬롯 우선 선택 (`wasEmpty=true`)
+- 빈 슬롯 없으면 변환 + 스냅샷 저장
+- 레인보우 잎은 보호
+- `_expireGolden` — 빈 슬롯 경로: 슬롯 비움 + leaf_count 감소
+- `_expireGolden` — 변환 경로: 스냅샷 색상/라이프 복구
+- `increaseTick`에서 ticksLeft 감소
+- 자동 만료 (ticksLeft → 0)
+- 매치 시 9점
+- 황금 vs 레인보우 매치도 9점 (황금 우선)
+- 매치 시 `_activeGolden = null` 즉시 정리
+- 모노크롬 보드여도 황금이 있으면 `_isPlayable() === true`
+- `init` / `playPuzzleLevel`이 쿨다운/활성 상태 리셋
+
+## 30. 후속 후보
 
 - 남은 JS 파일들도 점진적으로 .ts로 이식 (현재는 ambient 선언으로 우회 중)
 - `flower.js` / `leaf.js` 인덱스 0–6 / 1–6 매핑을 자료구조로 분리해 가독성 정리
 - 콜아웃 텍스트 / 보너스 점수 테이블의 매직 넘버를 상수화
 - 모바일 터치 제스처(스와이프로 회전 등) 검토
+- 황금 꽃잎이 매치되어 사라질 때 별도의 sparkle / coin-pop 이펙트

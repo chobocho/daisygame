@@ -114,6 +114,15 @@ test("Leaf: setRainbow marks the leaf as rainbow and alive", () => {
   assert.equal(l.color(), 8);
 });
 
+test("Leaf: setGolden marks the leaf as gold (color 9) and alive", () => {
+  const l = new Leaf(10);
+  l.setGolden();
+  assert.equal(l.isGolden(), true);
+  assert.equal(l.isAlive(), true);
+  assert.equal(l.color(), 9);
+  assert.equal(l.isRainbow(), false);
+});
+
 test("Leaf: get_life_ratio and get_birth_ratio expose the render fractions", () => {
   const l = new Leaf(10);
   assert.equal(l.get_life_ratio(), 1);

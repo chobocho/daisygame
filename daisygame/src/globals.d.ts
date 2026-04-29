@@ -44,8 +44,17 @@ interface LeafLike {
   color(): number;
   isAlive(): boolean;
   isRainbow(): boolean;
+  isGolden(): boolean;
   get_life_ratio(): number;
   get_birth_ratio(): number;
+}
+
+interface ActiveGolden {
+  flower: number;
+  idx: number;
+  ticksLeft: number;
+  dyingTicks: number;
+  wasEmpty: boolean;
 }
 
 interface FlowerLike {
@@ -82,6 +91,7 @@ interface DaisyGameLike {
   timerSecondsFloat(): number;
   puzzleLevel(): number;
   puzzleProgress(): PuzzleProgressLike | null;
+  activeGolden(): ActiveGolden | null;
 }
 
 declare class Puzzle {

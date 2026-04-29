@@ -37,6 +37,18 @@ class Leaf {
         return this._color === 8;
     }
 
+    // Golden leaf: a temporary 9-point wildcard event. Color 9 is reserved.
+    // The 2..5s lifetime and grow-and-fade revert/clear are driven from
+    // DaisyGame._activeGolden — the leaf itself just owns the color flag.
+    setGolden() {
+        this._color = 9;
+        this._life = this._origin_life;
+    }
+
+    isGolden() {
+        return this._color === 9;
+    }
+
     // Render-side helpers — exposed so the draw engine can play different
     // animations for rainbow leaves (grow + fade) without re-deriving from
     // size().
