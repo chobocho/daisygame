@@ -1319,31 +1319,43 @@ DrawEngine.PETAL_COLORS = [
     { base: "#FFA559", light: "#FFC993", dark: "#E07F1F", outline: "rgba(140,60,0,0.35)" },
 ];
 // Per-slot palettes for the puzzle timer petal stack (12 slots, slot 0 =
-// bottom). Single warm coral hue, lightened toward white at higher slots
-// so the stack reads top-pale → bottom-deep. Pre-computed once at class
-// load so the draw loop just indexes — no per-frame string allocation.
+// bottom). Three-stop gradient along the stack:
+//   bottom (slot 0)        deep red    — last petals to fall, "time low"
+//   middle (slot ~5-6)     white       — steady mid-game
+//   top (slot 11)          deep blue   — first petals to fall, "lots left"
+// Pre-computed once at class load so the draw loop just indexes.
 DrawEngine.PUZZLE_TIMER_PALETTES = (() => {
     const N = 12;
-    const MAX_LIGHTEN = 0.7;
-    const baseRGB = [220, 79, 44]; // #DC4F2C
-    const lightRGB = [255, 171, 133]; // #FFAB85
-    const darkRGB = [142, 42, 20]; // #8E2A14
-    const lerp = (c, t) => {
-        const r = Math.round(c[0] + (255 - c[0]) * t);
-        const g = Math.round(c[1] + (255 - c[1]) * t);
-        const b = Math.round(c[2] + (255 - c[2]) * t);
-        return `rgb(${r}, ${g}, ${b})`;
+    const RED = [196, 43, 43]; // #C42B2B
+    const WHITE = [255, 255, 255];
+    const BLUE = [43, 79, 196]; // #2B4FC4
+    // 3-stop interpolation: RED at t=0, WHITE at t=0.5, BLUE at t=1.
+    const lerp3 = (t) => {
+        const blend = (a, b, u) => [
+            Math.round(a[0] + (b[0] - a[0]) * u),
+            Math.round(a[1] + (b[1] - a[1]) * u),
+            Math.round(a[2] + (b[2] - a[2]) * u),
+        ];
+        return t < 0.5 ? blend(RED, WHITE, t * 2) : blend(WHITE, BLUE, (t - 0.5) * 2);
+    };
+    // Build a {base, light, dark, outline} from a single base RGB. dark is
+    // a 60%-toward-black version, light is 50%-toward-white — same recipe
+    // for every slot, so the per-slot hue drives the visual.
+    const palette = (rgb) => {
+        const [r, g, b] = rgb;
+        const fmt = (rr, gg, bb) => `rgb(${rr}, ${gg}, ${bb})`;
+        return {
+            base: fmt(r, g, b),
+            light: fmt(Math.round(r + (255 - r) * 0.5), Math.round(g + (255 - g) * 0.5), Math.round(b + (255 - b) * 0.5)),
+            dark: fmt(Math.round(r * 0.6), Math.round(g * 0.6), Math.round(b * 0.6)),
+            outline: "rgba(0, 0, 0, 0.5)",
+        };
     };
     const out = [];
     for (let i = 0; i < N; i++) {
-        // i=0 (bottom) → t=0 (full saturation). i=N-1 (top) → t=MAX_LIGHTEN.
-        const t = (i / (N - 1)) * MAX_LIGHTEN;
-        out.push({
-            base: lerp(baseRGB, t),
-            light: lerp(lightRGB, t),
-            dark: lerp(darkRGB, t),
-            outline: "rgba(120, 40, 20, 0.55)",
-        });
+        // i=0 → t=0 (red, bottom). i=N-1 → t=1 (blue, top).
+        const t = i / (N - 1);
+        out.push(palette(lerp3(t)));
     }
     return out;
 })();
