@@ -166,11 +166,48 @@ function touchListener(event) {
   }
 }
 
-function InitValue() {
-  let imageLoader = new ImageLoader();
-  imageLoader.load();
+function saveResumeIfPlaying() {
+  // Best-effort autosave. Called from page-lifecycle events and a periodic
+  // timer so an in-progress round survives mobile app-switch, tab kill,
+  // OS-kill, and battery cutoffs — none of which reliably fire
+  // beforeunload alone, especially on iOS Safari and Chrome Android.
+  try {
+    if (typeof daisyGame !== 'undefined' && daisyGame &&
+        (daisyGame.isPlayState() || daisyGame.isPauseState())) {
+      scoreDB.setResume(daisyGame.serialize());
+    }
+  } catch (e) {
+    // Swallow — losing one autosave is OK, throwing on unload is not.
+  }
+}
 
-  scoreDB = new LocalDB();
+function InitValue() {
+  let imageLoader;
+  try {
+    imageLoader = new ImageLoader();
+    imageLoader.load();
+  } catch (e) {
+    // Image load failure shouldn't block boot — DrawEngine will still
+    // render shapes, and the missing background just looks blank.
+    printf("[Main]", "ImageLoader failed: " + e);
+    if (!imageLoader) imageLoader = { images: { background: new Image() } };
+  }
+
+  // LocalDB methods are individually try/catch'd; this constructor can't
+  // throw. Even so, wrap to keep the boot path single-path-safe.
+  try {
+    scoreDB = new LocalDB();
+  } catch (e) {
+    printf("[Main]", "LocalDB ctor failed: " + e);
+    scoreDB = {
+      getScore() { return 0; },
+      setScore() {},
+      getResume() { return null; },
+      setResume() {},
+      clearResume() {},
+    };
+  }
+
   daisyGame = new DaisyGame(100, 200, scoreDB.getScore());
   daisyGame.init();
   gameEngine = new GameEngine(daisyGame, scoreDB);
@@ -187,16 +224,17 @@ function InitValue() {
     printf("[Main]", "Resume restore failed: " + e);
   }
 
-  // Persist the game when the user navigates away or closes the tab.
-  window.addEventListener('beforeunload', function () {
-    try {
-      if (daisyGame.isPlayState() || daisyGame.isPauseState()) {
-        scoreDB.setResume(daisyGame.serialize());
-      }
-    } catch (e) {
-      // never block unload
-    }
+  // Save on every meaningful page-lifecycle signal. pagehide is the most
+  // reliable on mobile (iOS Safari, Chrome Android); visibilitychange
+  // covers app-switch/lock; beforeunload remains for desktop close.
+  window.addEventListener('beforeunload', saveResumeIfPlaying);
+  window.addEventListener('pagehide', saveResumeIfPlaying);
+  document.addEventListener('visibilitychange', function () {
+    if (document.visibilityState === 'hidden') saveResumeIfPlaying();
   });
+  // Periodic safety net for OS-kill / battery / crash scenarios where
+  // none of the lifecycle events fire.
+  setInterval(saveResumeIfPlaying, 5000);
 
   window.onkeydown = KeyPressEvent;
 

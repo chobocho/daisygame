@@ -832,9 +832,12 @@ class DaisyGame {
     }
 
     serialize() {
-        // Resolve any in-flight gold event so the snapshot doesn't capture
-        // half a transient state. Resume will simply not see it.
-        if (this._activeGolden) this._expireGolden();
+        // Pure snapshot — no live-state mutation. The auto-save path runs
+        // every few seconds during play, so anything that touched live
+        // state here would interrupt in-flight events (gold, dying
+        // animations) for the player. Each leaf's _goldSnapshot is in the
+        // snapshot, and restore() reverts any orphaned gold leaves after
+        // rebuilding the flowers.
         return {
             v: 1,
             mode: this._mode,
@@ -891,9 +894,19 @@ class DaisyGame {
         }
 
         // Resume starts with no gold event in flight; the cooldown re-arms
-        // and the next 8s window will spawn a fresh pair.
+        // and the next 8s window will spawn a fresh pair. Any leaf that
+        // happened to be gold at save-time reverts to its snapshot color
+        // (or empty) so the resumed board is consistent.
         this._goldenCooldown = this.GOLDEN_INTERVAL_TICKS;
         this._activeGolden = null;
+        for (const f of this._flowerArr) {
+            for (const l of f.leaf) {
+                if (l.isGolden()) {
+                    const becameEmpty = l.revertFromGolden();
+                    if (becameEmpty) f._leaf_count = Math.max(0, f._leaf_count - 1);
+                }
+            }
+        }
         this._comboMultiplier = 1.0;
         this._comboCooldown = 0;
 

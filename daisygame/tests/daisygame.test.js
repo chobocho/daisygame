@@ -971,31 +971,88 @@ test("DaisyGame: matching a gold pair counts as a combo step", () => {
   assert.equal(g.score() - before, 10);
 });
 
-test("DaisyGame: serialize pre-expires an active gold pair (transformed → reverted)", () => {
+test("DaisyGame: serialize during a gold event does NOT mutate live state", () => {
+  // The auto-save path runs every few seconds during play, so serialize
+  // must be a pure snapshot — anything that touched live state would
+  // interrupt in-flight events for the player.
   const g = fresh();
   g.start();
-  // Full board → transform path. Capture original colors first.
   g._trySpawnGolden();
-  const golds = findAllGold(g);
+  const goldsBefore = findAllGold(g);
+  assert.equal(goldsBefore.length, 2);
+  const agBefore = g.activeGolden();
+  assert.ok(agBefore);
+
+  g.serialize();
+
+  // Live game is untouched — gold leaves still gold, event still active.
+  const goldsAfter = findAllGold(g);
+  assert.equal(goldsAfter.length, 2);
+  assert.ok(g.activeGolden());
+  assert.equal(g.activeGolden().ticksLeft, agBefore.ticksLeft,
+    "serialize must not advance the gold timer");
+});
+
+test("DaisyGame: restore reverts in-flight transformed gold to the snapshot color", () => {
+  const a = fresh();
+  a.start();
+  // Full board → transform path on both gold sides.
+  a._trySpawnGolden();
+  const golds = findAllGold(a);
   assert.equal(golds.length, 2);
   const expected = golds.map(s => ({
     slot: s,
-    color: g.getFlowers()[s.flower].leaf[s.idx]._goldSnapshot.color,
+    color: a.getFlowers()[s.flower].leaf[s.idx]._goldSnapshot.color,
   }));
-  const snap = g.serialize();
-  // After serialize the active record is gone and both leaves are reverted.
-  assert.equal(g.activeGolden(), null);
+  // Round-trip via JSON to mirror the real localStorage path.
+  const snap = JSON.parse(JSON.stringify(a.serialize()));
+
+  const b = fresh();
+  assert.equal(b.restore(snap), true);
+  assert.equal(b.activeGolden(), null);
   for (const e of expected) {
-    const l = g.getFlowers()[e.slot.flower].leaf[e.slot.idx];
-    assert.equal(l.color(), e.color);
+    const l = b.getFlowers()[e.slot.flower].leaf[e.slot.idx];
     assert.equal(l.isGolden(), false);
+    assert.equal(l.color(), e.color, "transformed gold must revert to snapshot color");
   }
-  // Restoring the snapshot has no lingering gold either.
-  const h = fresh();
-  assert.equal(h.restore(snap), true);
-  for (const f of h.getFlowers()) {
-    for (const l of f.leaf) assert.equal(l.isGolden(), false);
+});
+
+test("DaisyGame: restore clears in-flight empty-fill gold (back to empty slots)", () => {
+  const a = fresh();
+  a.start();
+  // Wipe the board so the spawn picks the empty-fill path on both sides.
+  for (const f of a.getFlowers()) {
+    for (let i = 0; i < 6; i++) {
+      f.leaf[i]._color = 0;
+      f.leaf[i]._life = 0;
+    }
+    f._leaf_count = 0;
   }
+  a._trySpawnGolden();
+  const golds = findAllGold(a);
+  assert.equal(golds.length, 2);
+  const snap = JSON.parse(JSON.stringify(a.serialize()));
+
+  const b = fresh();
+  assert.equal(b.restore(snap), true);
+  for (const s of golds) {
+    const l = b.getFlowers()[s.flower].leaf[s.idx];
+    assert.equal(l.isGolden(), false);
+    assert.equal(l.color(), 0, "empty-fill gold reverts to empty on resume");
+  }
+});
+
+test("Leaf: serialize / restore round-trips _goldSnapshot when the leaf is mid-transform", () => {
+  const a = new (require('./_bootstrap').loadGame()).Leaf(10);
+  a.setGolden({ color: 5, life: 12, birth: 7 });
+  const snap = JSON.parse(JSON.stringify(a.serialize()));
+  const b = new (require('./_bootstrap').loadGame()).Leaf(10);
+  b.restore(snap);
+  assert.equal(b.isGolden(), true);
+  assert.ok(b._goldSnapshot, "restored leaf must keep its gold snapshot");
+  assert.equal(b._goldSnapshot.color, 5);
+  assert.equal(b._goldSnapshot.life, 12);
+  assert.equal(b._goldSnapshot.birth, 7);
 });
 
 test("DaisyGame: puzzleLevel returns 0 outside puzzle mode", () => {

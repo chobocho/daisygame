@@ -123,7 +123,7 @@ class Leaf {
     }
 
     serialize() {
-        return {
+        const out = {
             color: this._color,
             colorTable: this._colorTable.slice(),
             colorIdx: this._colorIdx,
@@ -133,6 +133,16 @@ class Leaf {
             birth: this._birth,
             birthMax: this._birthMax,
         };
+        // Round-trip the gold transform snapshot so a save mid-event lets
+        // DaisyGame.restore revert this leaf to its original color.
+        if (this._goldSnapshot) {
+            out.goldSnapshot = {
+                color: this._goldSnapshot.color,
+                life: this._goldSnapshot.life,
+                birth: this._goldSnapshot.birth,
+            };
+        }
+        return out;
     }
 
     restore(d) {
@@ -149,6 +159,16 @@ class Leaf {
         if (typeof d.birthMax === 'number' && d.birthMax > 0) this._birthMax = d.birthMax;
         if (typeof d.birth === 'number') {
             this._birth = Math.max(0, Math.min(this._birthMax, d.birth));
+        }
+        if (d.goldSnapshot && typeof d.goldSnapshot === 'object' &&
+            typeof d.goldSnapshot.color === 'number') {
+            this._goldSnapshot = {
+                color: d.goldSnapshot.color | 0,
+                life: typeof d.goldSnapshot.life === 'number' ? d.goldSnapshot.life | 0 : 0,
+                birth: typeof d.goldSnapshot.birth === 'number' ? d.goldSnapshot.birth | 0 : 0,
+            };
+        } else {
+            this._goldSnapshot = null;
         }
         return true;
     }

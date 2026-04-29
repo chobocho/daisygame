@@ -590,7 +590,7 @@ class Leaf {
     }
 
     serialize() {
-        return {
+        const out = {
             color: this._color,
             colorTable: this._colorTable.slice(),
             colorIdx: this._colorIdx,
@@ -600,6 +600,16 @@ class Leaf {
             birth: this._birth,
             birthMax: this._birthMax,
         };
+        // Round-trip the gold transform snapshot so a save mid-event lets
+        // DaisyGame.restore revert this leaf to its original color.
+        if (this._goldSnapshot) {
+            out.goldSnapshot = {
+                color: this._goldSnapshot.color,
+                life: this._goldSnapshot.life,
+                birth: this._goldSnapshot.birth,
+            };
+        }
+        return out;
     }
 
     restore(d) {
@@ -616,6 +626,16 @@ class Leaf {
         if (typeof d.birthMax === 'number' && d.birthMax > 0) this._birthMax = d.birthMax;
         if (typeof d.birth === 'number') {
             this._birth = Math.max(0, Math.min(this._birthMax, d.birth));
+        }
+        if (d.goldSnapshot && typeof d.goldSnapshot === 'object' &&
+            typeof d.goldSnapshot.color === 'number') {
+            this._goldSnapshot = {
+                color: d.goldSnapshot.color | 0,
+                life: typeof d.goldSnapshot.life === 'number' ? d.goldSnapshot.life | 0 : 0,
+                birth: typeof d.goldSnapshot.birth === 'number' ? d.goldSnapshot.birth | 0 : 0,
+            };
+        } else {
+            this._goldSnapshot = null;
         }
         return true;
     }
@@ -1617,9 +1637,12 @@ class DaisyGame {
     }
 
     serialize() {
-        // Resolve any in-flight gold event so the snapshot doesn't capture
-        // half a transient state. Resume will simply not see it.
-        if (this._activeGolden) this._expireGolden();
+        // Pure snapshot — no live-state mutation. The auto-save path runs
+        // every few seconds during play, so anything that touched live
+        // state here would interrupt in-flight events (gold, dying
+        // animations) for the player. Each leaf's _goldSnapshot is in the
+        // snapshot, and restore() reverts any orphaned gold leaves after
+        // rebuilding the flowers.
         return {
             v: 1,
             mode: this._mode,
@@ -1676,9 +1699,19 @@ class DaisyGame {
         }
 
         // Resume starts with no gold event in flight; the cooldown re-arms
-        // and the next 8s window will spawn a fresh pair.
+        // and the next 8s window will spawn a fresh pair. Any leaf that
+        // happened to be gold at save-time reverts to its snapshot color
+        // (or empty) so the resumed board is consistent.
         this._goldenCooldown = this.GOLDEN_INTERVAL_TICKS;
         this._activeGolden = null;
+        for (const f of this._flowerArr) {
+            for (const l of f.leaf) {
+                if (l.isGolden()) {
+                    const becameEmpty = l.revertFromGolden();
+                    if (becameEmpty) f._leaf_count = Math.max(0, f._leaf_count - 1);
+                }
+            }
+        }
         this._comboMultiplier = 1.0;
         this._comboCooldown = 0;
 
@@ -3333,11 +3366,48 @@ function touchListener(event) {
   }
 }
 
-function InitValue() {
-  let imageLoader = new ImageLoader();
-  imageLoader.load();
+function saveResumeIfPlaying() {
+  // Best-effort autosave. Called from page-lifecycle events and a periodic
+  // timer so an in-progress round survives mobile app-switch, tab kill,
+  // OS-kill, and battery cutoffs — none of which reliably fire
+  // beforeunload alone, especially on iOS Safari and Chrome Android.
+  try {
+    if (typeof daisyGame !== 'undefined' && daisyGame &&
+        (daisyGame.isPlayState() || daisyGame.isPauseState())) {
+      scoreDB.setResume(daisyGame.serialize());
+    }
+  } catch (e) {
+    // Swallow — losing one autosave is OK, throwing on unload is not.
+  }
+}
 
-  scoreDB = new LocalDB();
+function InitValue() {
+  let imageLoader;
+  try {
+    imageLoader = new ImageLoader();
+    imageLoader.load();
+  } catch (e) {
+    // Image load failure shouldn't block boot — DrawEngine will still
+    // render shapes, and the missing background just looks blank.
+    printf("[Main]", "ImageLoader failed: " + e);
+    if (!imageLoader) imageLoader = { images: { background: new Image() } };
+  }
+
+  // LocalDB methods are individually try/catch'd; this constructor can't
+  // throw. Even so, wrap to keep the boot path single-path-safe.
+  try {
+    scoreDB = new LocalDB();
+  } catch (e) {
+    printf("[Main]", "LocalDB ctor failed: " + e);
+    scoreDB = {
+      getScore() { return 0; },
+      setScore() {},
+      getResume() { return null; },
+      setResume() {},
+      clearResume() {},
+    };
+  }
+
   daisyGame = new DaisyGame(100, 200, scoreDB.getScore());
   daisyGame.init();
   gameEngine = new GameEngine(daisyGame, scoreDB);
@@ -3354,16 +3424,17 @@ function InitValue() {
     printf("[Main]", "Resume restore failed: " + e);
   }
 
-  // Persist the game when the user navigates away or closes the tab.
-  window.addEventListener('beforeunload', function () {
-    try {
-      if (daisyGame.isPlayState() || daisyGame.isPauseState()) {
-        scoreDB.setResume(daisyGame.serialize());
-      }
-    } catch (e) {
-      // never block unload
-    }
+  // Save on every meaningful page-lifecycle signal. pagehide is the most
+  // reliable on mobile (iOS Safari, Chrome Android); visibilitychange
+  // covers app-switch/lock; beforeunload remains for desktop close.
+  window.addEventListener('beforeunload', saveResumeIfPlaying);
+  window.addEventListener('pagehide', saveResumeIfPlaying);
+  document.addEventListener('visibilitychange', function () {
+    if (document.visibilityState === 'hidden') saveResumeIfPlaying();
   });
+  // Periodic safety net for OS-kill / battery / crash scenarios where
+  // none of the lifecycle events fire.
+  setInterval(saveResumeIfPlaying, 5000);
 
   window.onkeydown = KeyPressEvent;
 
