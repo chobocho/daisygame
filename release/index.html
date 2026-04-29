@@ -1002,13 +1002,12 @@ class DaisyGame {
     }
 
     _fillEmptySlots() {
+        // Use Flower.addLeaf so the freshly placed color is re-rolled away
+        // from any already-alive _leafMap neighbor — keeps the auto-refill
+        // from handing out free instant matches the player didn't earn.
         this._flowerArr.forEach(f => {
-            for (let i = 0; i < 6; i++) {
-                if (f.leaf[i].color() === 0) {
-                    f.leaf[i].reset();
-                    f.leaf[i].playBirth();
-                    f._leaf_count = Math.min(6, f._leaf_count + 1);
-                }
+            for (let attempt = 0; attempt < 6 && f.leaf_count() < 6; attempt++) {
+                f.addLeaf(this._flowerArr);
             }
         });
     }
@@ -1373,6 +1372,14 @@ class DaisyGame {
         if (this._tick > 60 || leaf_count < refillThreshold) {
             this._tick = 0;
             this._addLeaf();
+        }
+
+        // Puzzle mode keeps the board topped up every tick so the player
+        // isn't waiting between matches. Only color === 0 slots are
+        // touched, so dying leaves (life > 0) and rainbow / gold leaves
+        // sit through the auto-refill untouched.
+        if (this._mode === this.MODE_PUZZLE) {
+            this._fillEmptySlots();
         }
 
         this._flowerArr.forEach(f => {
