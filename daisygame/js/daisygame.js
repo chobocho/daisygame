@@ -569,12 +569,14 @@ class DaisyGame {
             this._addLeaf();
         }
 
-        // Puzzle mode: when the board has no matchable pair at all, force
-        // a refill so the player isn't soft-locked. As long as a match is
-        // still achievable through rotation, fall back to the standard
-        // slow cadence used by arcade / endless.
-        if (this._mode === this.MODE_PUZZLE && !this._isPlayable()) {
-            this._fillEmptySlots();
+        // Puzzle mode: when no rotation can produce a match (stricter than
+        // _isPlayable's "any empty slot is fine" view), drop a single
+        // deliberately matchable leaf into an empty boundary slot — the
+        // partner's color, so it lines up after one rotation. The cadence
+        // path (Flower.addLeaf) actively avoids matching colors, so without
+        // this rescue the player can stall after an unlucky refill.
+        if (this._mode === this.MODE_PUZZLE && !this._hasMatchablePair()) {
+            this._spawnMatchableLeaf();
         }
 
         this._flowerArr.forEach(f => {
@@ -665,6 +667,88 @@ class DaisyGame {
         pick.flower.leaf[pick.idx].playBirth();
         pick.flower._leaf_count = Math.min(6, pick.flower._leaf_count + 1);
         return true;
+    }
+
+    // ---------- Matchable-pair detection / rescue ----------
+
+    // Stricter version of _isPlayable: a board with empty slots but no
+    // shared adjacent colors counts as "no matchable pair". Used by the
+    // puzzle rescue spawn so partial-empty boards that drifted into a
+    // non-matchable state don't have to wait for the slow cadence to
+    // randomly land on a matching color.
+    _hasMatchablePair() {
+        if (this._hasRainbow() || this._hasGolden()) return true;
+
+        const N = this._flowerArr.length;
+        const leaf_color = Array.from({ length: N }, () => new Set());
+        for (let f = 0; f < N; f++) {
+            for (const l of this._flowerArr[f].leaf) {
+                if (l.isAlive() && l.color() > 0) {
+                    leaf_color[f].add(l.color());
+                }
+            }
+        }
+
+        const seen = new Set();
+        for (const pairs of this._leafMap) {
+            for (const [a, b] of pairs) {
+                const fa = Math.floor(a / 10);
+                const fb = Math.floor(b / 10);
+                if (fa === fb) continue;
+                const key = fa < fb ? (fa * 10 + fb) : (fb * 10 + fa);
+                if (seen.has(key)) continue;
+                seen.add(key);
+                for (const c of leaf_color[fa]) {
+                    if (leaf_color[fb].has(c)) return true;
+                }
+            }
+        }
+        return false;
+    }
+
+    // Place exactly one new leaf in an empty _leafMap boundary slot, with
+    // the same color as the (alive, normal) partner across the pair, so a
+    // single rotation aligns them into a match. Skips pairs guarded by
+    // rainbow / gold so wildcards aren't disturbed. No-op if no empty
+    // boundary slot has a viable partner.
+    _spawnMatchableLeaf() {
+        const seen = new Set();
+        for (const pairs of this._leafMap) {
+            for (const [a, b] of pairs) {
+                const key = a < b ? (a + '-' + b) : (b + '-' + a);
+                if (seen.has(key)) continue;
+                seen.add(key);
+
+                const fa = Math.floor(a / 10);
+                const ia = a % 10;
+                const fb = Math.floor(b / 10);
+                const ib = b % 10;
+                if (fa >= this._flowerArr.length || fb >= this._flowerArr.length) continue;
+
+                const lA = this._flowerArr[fa].leaf[ia];
+                const lB = this._flowerArr[fb].leaf[ib];
+                if (lA.isRainbow() || lA.isGolden()) continue;
+                if (lB.isRainbow() || lB.isGolden()) continue;
+
+                if (lA.color() === 0 && lB.isAlive() && lB.color() >= 1 && lB.color() <= 7) {
+                    this._placeMatchableLeaf(this._flowerArr[fa], ia, lB.color());
+                    return true;
+                }
+                if (lB.color() === 0 && lA.isAlive() && lA.color() >= 1 && lA.color() <= 7) {
+                    this._placeMatchableLeaf(this._flowerArr[fb], ib, lA.color());
+                    return true;
+                }
+            }
+        }
+        return false;
+    }
+
+    _placeMatchableLeaf(flower, slotIdx, color) {
+        const l = flower.leaf[slotIdx];
+        l._color = color;
+        l._life = l._origin_life;
+        l.playBirth();
+        flower._leaf_count = Math.min(6, flower._leaf_count + 1);
     }
 
     // ---------- Golden leaf event ----------

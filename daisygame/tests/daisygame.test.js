@@ -316,78 +316,136 @@ test("DaisyGame: pausing then starting (no arg) resumes same mode without resett
   assert.equal(g.isPlayState(), true);
 });
 
-test("DaisyGame: puzzle increaseTick keeps a partial empty as-is while the board is still playable", () => {
-  // After a match, the slow _addLeaf cadence handles the refill — the
-  // immediate-refill path only triggers when no matchable pair exists.
+// _hasMatchablePair stays true → gate skips → cadence handles the refill.
+// Pin a shared color across the boundary so the test isn't flaky against
+// the random colors that _init_flower lays down.
+test("DaisyGame: puzzle increaseTick leaves a partial empty alone while a matchable pair exists", () => {
   const g = fresh();
   g.playPuzzleLevel(1);
   const flowers = g.getFlowers();
-  flowers[0].leaf[2]._color = 0;
-  flowers[0].leaf[2]._life = 0;
+  flowers[0].leaf[5]._color = 3;
+  flowers[0].leaf[5]._life = 15;
+  flowers[1].leaf[2]._color = 3;
+  flowers[1].leaf[2]._life = 15;
+  // F0 boundary slot 0 is empty; the partner (F1 slot 3) has whatever color
+  // _init_flower assigned. _hasMatchablePair sees the shared color 3, returns
+  // true, and the rescue spawn skips.
+  flowers[0].leaf[0]._color = 0;
+  flowers[0].leaf[0]._life = 0;
   flowers[0]._leaf_count = 5;
-  // _isPlayable returns true (any flower with leaf_count < 6 is playable),
-  // so the gate skips the auto-refill.
   g.increaseTick();
-  assert.equal(flowers[0].leaf[2].color(), 0,
-    "playable boards must wait for the slow cadence, not auto-refill");
+  assert.equal(flowers[0].leaf[0].color(), 0,
+    "playable boards must wait for the slow cadence, not auto-spawn");
 });
 
-test("DaisyGame: puzzle increaseTick auto-refills only when no matchable pair exists", () => {
+// The new positive case: no shared color, empty boundary slot → rescue
+// spawn copies the alive partner's color into the empty slot, so a single
+// rotation of the right flower aligns the pair into a match.
+test("DaisyGame: puzzle increaseTick spawns a matchable leaf when no shared colors exist", () => {
   const g = fresh();
   g.playPuzzleLevel(1);
   const flowers = g.getFlowers();
-  flowers[0].leaf[2]._color = 0;
-  flowers[0].leaf[2]._life = 0;
+  // F0 = {1}, F1 = {2} — no shared color, so _hasMatchablePair is false.
+  for (let i = 0; i < 6; i++) {
+    flowers[0].leaf[i]._color = 1;
+    flowers[0].leaf[i]._life = 15;
+    flowers[1].leaf[i]._color = 2;
+    flowers[1].leaf[i]._life = 15;
+  }
+  // Empty the F0 side of the [0, 13] boundary pair.
+  flowers[0].leaf[0]._color = 0;
+  flowers[0].leaf[0]._life = 0;
   flowers[0]._leaf_count = 5;
-  // Force the stuck branch — the gated refill should now fire.
-  g._isPlayable = () => false;
   g.increaseTick();
-  assert.notEqual(flowers[0].leaf[2].color(), 0,
-    "stuck-board (no matchable pair) must auto-refill empties");
+  // The partner (F1 leaf 3 = color 2) is copied into F0 leaf 0.
+  assert.equal(flowers[0].leaf[0].color(), 2,
+    "rescue spawn must copy the alive partner's color");
   assert.equal(flowers[0]._leaf_count, 6);
 });
 
-test("DaisyGame: endless increaseTick does NOT auto-refill an isolated empty slot", () => {
-  // Confirms the auto-refill is gated on puzzle mode — endless / arcade
-  // keep the existing slow _addLeaf cadence so player skill matters.
+test("DaisyGame: endless increaseTick never spawns the rescue leaf", () => {
   const g = fresh();
   g.start(MODE_ENDLESS);
   const flowers = g.getFlowers();
-  flowers[0].leaf[2]._color = 0;
-  flowers[0].leaf[2]._life = 0;
+  // Force a non-matchable layout — endless still must NOT auto-spawn.
+  for (const f of flowers) {
+    for (let i = 0; i < 6; i++) {
+      f.leaf[i]._color = (f.index === 0) ? 1 : 2;
+      f.leaf[i]._life = 15;
+    }
+  }
+  flowers[0].leaf[0]._color = 0;
+  flowers[0].leaf[0]._life = 0;
   flowers[0]._leaf_count = 5;
-  // Natural state: _isPlayable returns true (one flower has leaf_count < 6),
-  // so neither the puzzle gate nor the rainbow-stuck branch fires.
   g.increaseTick();
-  assert.equal(flowers[0].leaf[2].color(), 0,
+  assert.equal(flowers[0].leaf[0].color(), 0,
     "endless mode must let the slow cadence handle refills");
 });
 
-test("DaisyGame: puzzle auto-refill leaves rainbow / gold leaves untouched", () => {
+// Rainbow shortcut: any rainbow + alive non-rainbow is reachable through
+// rotation, so _hasMatchablePair returns true and the rescue stays out of
+// the way (the rainbow itself never gets overwritten).
+test("DaisyGame: puzzle rescue skips when a rainbow is on the board", () => {
   const g = fresh();
   g.playPuzzleLevel(1);
   const flowers = g.getFlowers();
-  flowers[0].leaf[0].setRainbow();
-  flowers[1].leaf[3].setGolden(null);
-  // Force the gated refill so we exercise the path even on a full board.
-  g._isPlayable = () => false;
+  for (let i = 0; i < 6; i++) {
+    flowers[0].leaf[i]._color = 1;
+    flowers[0].leaf[i]._life = 15;
+    flowers[1].leaf[i]._color = 2;
+    flowers[1].leaf[i]._life = 15;
+  }
+  flowers[1].leaf[0].setRainbow();
+  flowers[0].leaf[0]._color = 0;
+  flowers[0].leaf[0]._life = 0;
+  flowers[0]._leaf_count = 5;
   g.increaseTick();
-  assert.equal(flowers[0].leaf[0].isRainbow(), true);
-  assert.equal(flowers[1].leaf[3].isGolden(), true);
+  assert.equal(flowers[0].leaf[0].color(), 0,
+    "rainbow makes the board matchable; rescue spawn must skip");
+  assert.equal(flowers[1].leaf[0].isRainbow(), true);
 });
 
-test("DaisyGame: puzzle auto-refill respects the death animation (skips life > 0)", () => {
-  // Mid-shrink leaves still have color > 0; the refill must not stomp on
-  // them so the death animation can play out.
+// _spawnMatchableLeaf only places in color=0 slots — a dying leaf (life
+// shrinking, color still > 0) is never the target.
+test("DaisyGame: puzzle rescue never overwrites a mid-death-animation leaf", () => {
   const g = fresh();
   g.playPuzzleLevel(1);
   const flowers = g.getFlowers();
-  flowers[0].leaf[2]._life = 5; // dying — life < origin, color preserved
-  const dyingColor = flowers[0].leaf[2]._color;
-  g._isPlayable = () => false;  // force the gated refill path
+  // No-shared-colors layout, but the only F0-boundary candidate is dying.
+  for (let i = 0; i < 6; i++) {
+    flowers[0].leaf[i]._color = 1;
+    flowers[0].leaf[i]._life = 15;
+    flowers[1].leaf[i]._color = 2;
+    flowers[1].leaf[i]._life = 15;
+  }
+  flowers[0].leaf[0]._life = 5; // dying — color stays at 1, isAlive false
   g.increaseTick();
-  assert.equal(flowers[0].leaf[2]._color, dyingColor,
-    "dying leaf must not be overwritten by the auto-refill");
+  assert.equal(flowers[0].leaf[0]._color, 1,
+    "dying leaf must not be overwritten by the rescue spawn");
+});
+
+// Stuck full board (no shared colors AND no empty slots): rescue has no
+// candidate slot and gracefully no-ops. Wildcards (rainbow / gold cooldown)
+// are responsible for breaking this state on a longer timescale.
+test("DaisyGame: puzzle rescue is a no-op on a fully populated stuck board", () => {
+  const g = fresh();
+  g.playPuzzleLevel(1);
+  const flowers = g.getFlowers();
+  for (let i = 0; i < 6; i++) {
+    flowers[0].leaf[i]._color = 1;
+    flowers[0].leaf[i]._life = 15;
+    flowers[1].leaf[i]._color = 2;
+    flowers[1].leaf[i]._life = 15;
+  }
+  // Snapshot: rescue has no empty slot, can't place anything.
+  const before = flowers.map(f => f.leaf.map(l => l.color()));
+  g.increaseTick();
+  for (let f = 0; f < 2; f++) {
+    for (let i = 0; i < 6; i++) {
+      assert.equal(flowers[f].leaf[i].color(), before[f][i],
+        `flower ${f} leaf ${i} unchanged on stuck-full board`);
+    }
+  }
 });
 
 test("DaisyGame: puzzle mode auto-refills cleared flowers (matches arcade/endless)", () => {
