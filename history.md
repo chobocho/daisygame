@@ -1127,7 +1127,91 @@ restore(d) {
 
 기존 `clearBoard` 헬퍼는 `_leaf_count`를 0으로 리셋하지 않도록 수정 — 그러지 않으면 일곱 꽃이 모두 빈 상태로 보여 `_playEffectSound`의 monochrome 보너스(`scoreTable[7] = 1216`)가 발동해 단일 페어 점수 검증을 흐트림.
 
-## 31. 후속 후보
+## 31. 퍼즐 모드 연쇄 콤보 (×1.2 누적)
+
+피드백: "퍼즐 모드에서 1초 이내에서 계속 없애면 점수가 1.2배씩 증가하는 연쇄모드가 필요해. 사용자의 도파민을 위한 이벤트야."
+
+### 31.1 메커니즘
+
+퍼즐 모드 한정. 직전 매치 후 `COMBO_WINDOW_TICKS = 33` (약 1초) 안에 새로 매치하면 multiplier가 ×1.2 누적:
+
+| Match # (chain alive) | Multiplier |
+|---|---|
+| 1 (체인 시작) | 1.0× |
+| 2 (1초 내) | 1.2× |
+| 3 (1초 내) | 1.44× |
+| 4 | 1.728× |
+| ... | ... |
+
+윈도우가 만료(`_comboCooldown` 0 도달)되면 다음 매치는 다시 1.0×부터 시작. multiplier에는 캡 없음 — 60초 라운드의 자연 한계가 사실상 캡 역할.
+
+스케일은 페어 점수(`gained`)에만 적용. 꽃 비움 보너스(`scoreTable[count]` 100..1216)와 모노크롬 보너스(88)는 그대로 유지 — "운으로 한 번에 큰 점수가 들어오는" 이벤트까지 폭발하면 기획 의도(빠른 연쇄 플레이 보상)가 흐려지므로.
+
+### 31.2 구현 (`daisygame.js`)
+
+```js
+// constructor
+this.COMBO_WINDOW_TICKS = 33;
+this.COMBO_STEP = 1.2;
+this._comboMultiplier = 1.0;
+this._comboCooldown = 0;
+```
+
+`checkCollision`에서 점수 누적 직전:
+
+```js
+let multiplier = 1.0;
+if (this._mode === this.MODE_PUZZLE && gained > 0) {
+    if (this._comboCooldown > 0) {
+        this._comboMultiplier *= this.COMBO_STEP;  // 체인 살아있음
+    } else {
+        this._comboMultiplier = 1.0;               // 끊김 — 리셋
+    }
+    multiplier = this._comboMultiplier;
+    this._comboCooldown = this.COMBO_WINDOW_TICKS;
+}
+const scaledGained = (multiplier > 1.0) ? Math.floor(gained * multiplier) : gained;
+this.increaseScore(scaledGained);
+```
+
+`increaseTick`에서 매 틱 cooldown 감소 + 만료 시 multiplier 1.0으로 리셋:
+
+```js
+if (this._comboCooldown > 0) {
+    this._comboCooldown--;
+    if (this._comboCooldown === 0) {
+        this._comboMultiplier = 1.0;
+    }
+}
+```
+
+`init` / `playPuzzleLevel` / `restore`에서 모두 콤보 상태 리셋.
+
+### 31.3 시각 피드백
+
+도파민 이벤트인 만큼 시각 피드백을 분리:
+
+- `Effects.popScore`에 `popColor` 인자 — multiplier > 1.0이면 따뜻한 #E25E2A (코랄/오렌지), 아니면 기존 #3a2a18 (다크 브라운).
+- `Effects.callout(text, "combo")` — 새 kind. text는 `"x" + multiplier.toFixed(2)` (예: `x1.20`, `x1.44`, `x1.73`). multiplier가 10 이상이면 정수 반올림.
+- 기존 "Daisy Chain!" / "Flower Power!" 콜아웃과 시각 충돌 방지를 위해 combo 콜아웃은 y=160(위쪽)에 배치, 기존 클리어 콜아웃은 y=200 (중앙). 동시 발생 시 두 줄로 보임.
+- combo 콜아웃 그라데이션: `#FFE56B` (라이트 골드) → `#E25E2A` (웜 코랄). "hot streak" 느낌.
+
+`effects.ts`의 `Callout.kind` 유니온 확장: `"chain" | "power" | "combo"`.
+
+### 31.4 테스트 (168건, +8)
+
+- 첫 매치 = 1.0× 베이스 점수
+- 1초 내 두 번째 = ×1.2 (`floor(7 * 1.2) = 8`)
+- 1초 내 세 번째 = ×1.44 (`floor(7 * 1.44) = 10`)
+- 윈도우 만료 후 매치 = 1.0×로 리셋 + 점수도 베이스로 복귀
+- `_comboCooldown` 매 틱 감소, 0에 도달하면 multiplier 자동 1.0 리셋
+- 아케이드 모드: multiplier 미적용 (체인 북키핑도 건드리지 않음)
+- 엔들리스 모드: multiplier 미적용
+- `playPuzzleLevel(level)` 재진입 시 콤보 상태 리셋
+
+`stagePuzzlePair(g, color)` 헬퍼 — `_leafMap[0]`의 `[0, 13]` 페어를 노리고 F0 leaf 5 + F1 leaf 3에 같은 색을 심어, CW turnFlower(0) 한 번이면 매치되도록 셋업.
+
+## 32. 후속 후보
 
 - 남은 JS 파일들도 점진적으로 .ts로 이식 (현재는 ambient 선언으로 우회 중)
 - `flower.js` / `leaf.js` 인덱스 0–6 / 1–6 매핑을 자료구조로 분리해 가독성 정리

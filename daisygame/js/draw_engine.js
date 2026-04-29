@@ -1172,17 +1172,26 @@ class DrawEngine {
             }
             const alpha = t < 0.25 ? t * 4 : 1;
             const cx = gScreenX / 2;
-            const cy = 200;
+            // Combo callouts ride above the regular "Daisy Chain!" banner so a
+            // chain that simultaneously empties a flower can show both cleanly.
+            const isPower = c.kind === "power";
+            const isCombo = c.kind === "combo";
+            const cy = isCombo ? 160 : 200;
             bufCtx.globalAlpha = alpha;
             bufCtx.translate(cx, cy);
             bufCtx.scale(scale, scale);
-            const isPower = c.kind === "power";
-            const fontSize = isPower ? 38 : 30;
+            const fontSize = isPower ? 38 : isCombo ? 36 : 30;
             bufCtx.font = "bold " + fontSize + "px " + DrawEngine.TITLE_FONT;
             const grad = bufCtx.createLinearGradient(0, -fontSize / 2, 0, fontSize / 2);
             if (isPower) {
                 grad.addColorStop(0, "#FFD86F");
                 grad.addColorStop(1, "#E84393");
+            }
+            else if (isCombo) {
+                // Warm gold → coral so the multiplier reads as a "hot streak"
+                // dopamine hit, distinct from the pink/white flower-clear banner.
+                grad.addColorStop(0, "#FFE56B");
+                grad.addColorStop(1, "#E25E2A");
             }
             else {
                 grad.addColorStop(0, "#FFFFFF");

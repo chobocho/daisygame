@@ -9,7 +9,7 @@ interface ScorePopup {
 
 interface Callout {
   text: string;
-  kind: "chain" | "power";
+  kind: "chain" | "power" | "combo";
   life: number;
   maxLife: number;
 }
@@ -63,7 +63,7 @@ class Effects {
     });
   }
 
-  static callout(text: string, kind: "chain" | "power"): void {
+  static callout(text: string, kind: "chain" | "power" | "combo"): void {
     if (Effects.callouts.length >= Effects.MAX_CALLOUTS) Effects.callouts.shift();
     Effects.callouts.push({
       text,

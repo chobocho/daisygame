@@ -818,6 +818,16 @@ class DaisyGame {
         this._goldenCooldown = this.GOLDEN_INTERVAL_TICKS;
         this._activeGolden = null;
 
+        // Puzzle-mode chain combo: each match within COMBO_WINDOW_TICKS of
+        // the previous one compounds a 1.2x multiplier on the per-pair score.
+        // Flower-clear and monochrome bonuses stay unscaled — this is meant
+        // to reward fast, sustained play, not turn lucky chains into runaway
+        // jackpots.
+        this.COMBO_WINDOW_TICKS = 33;     // ≈ 1s at 30ms/tick
+        this.COMBO_STEP = 1.2;
+        this._comboMultiplier = 1.0;
+        this._comboCooldown = 0;
+
         this._startX = startX;
         this._startY = startY;
         this._x = startX;
@@ -940,6 +950,8 @@ class DaisyGame {
         this._state = this.IDLE_STATE;
         this._goldenCooldown = this.GOLDEN_INTERVAL_TICKS;
         this._activeGolden = null;
+        this._comboMultiplier = 1.0;
+        this._comboCooldown = 0;
         if (typeof Effects !== 'undefined') Effects.reset();
     }
 
@@ -1080,13 +1092,34 @@ class DaisyGame {
             }
         }
 
-        this.increaseScore(gained);
+        // Puzzle-mode chain combo. Each match within the 1s window compounds
+        // a 1.2x multiplier on `gained`. We update the multiplier first so
+        // its post-bump value is what scales THIS match (1st = 1.0x, 2nd =
+        // 1.2x, 3rd = 1.44x, ...).
+        let multiplier = 1.0;
+        if (this._mode === this.MODE_PUZZLE && gained > 0) {
+            if (this._comboCooldown > 0) {
+                this._comboMultiplier *= this.COMBO_STEP;
+            } else {
+                this._comboMultiplier = 1.0;
+            }
+            multiplier = this._comboMultiplier;
+            this._comboCooldown = this.COMBO_WINDOW_TICKS;
+        }
+        const scaledGained = (multiplier > 1.0) ? Math.floor(gained * multiplier) : gained;
+        this.increaseScore(scaledGained);
 
         if (removedLeaf === 0) return;
 
         if (typeof Effects !== 'undefined') {
             const turnFlower = this._flowerArr[flower];
-            Effects.popScore(turnFlower.x, turnFlower.y - turnFlower.radius - 12, gained);
+            const popColor = (multiplier > 1.0) ? "#E25E2A" : "#3a2a18";
+            Effects.popScore(turnFlower.x, turnFlower.y - turnFlower.radius - 12, scaledGained, popColor);
+            if (multiplier > 1.0) {
+                // One decimal place is enough to read; clamp absurd values.
+                const text = "x" + (multiplier >= 10 ? Math.round(multiplier) : multiplier.toFixed(2));
+                Effects.callout(text, "combo");
+            }
             for (const m of matches) {
                 Effects.burst(m.x, m.y, Effects.colorFor(m.colorIdx));
             }
@@ -1186,6 +1219,8 @@ class DaisyGame {
         this._state = this.PLAY_STATE;
         this._goldenCooldown = this.GOLDEN_INTERVAL_TICKS;
         this._activeGolden = null;
+        this._comboMultiplier = 1.0;
+        this._comboCooldown = 0;
         if (typeof Effects !== 'undefined') Effects.reset();
     }
 
@@ -1357,6 +1392,15 @@ class DaisyGame {
             this._activeGolden.ticksLeft--;
             if (this._activeGolden.ticksLeft <= 0) {
                 this._expireGolden();
+            }
+        }
+
+        // Combo cooldown — when it lapses, the chain breaks and the next
+        // match will start fresh at 1.0x.
+        if (this._comboCooldown > 0) {
+            this._comboCooldown--;
+            if (this._comboCooldown === 0) {
+                this._comboMultiplier = 1.0;
             }
         }
 
@@ -1635,6 +1679,8 @@ class DaisyGame {
         // and the next 8s window will spawn a fresh pair.
         this._goldenCooldown = this.GOLDEN_INTERVAL_TICKS;
         this._activeGolden = null;
+        this._comboMultiplier = 1.0;
+        this._comboCooldown = 0;
 
         // Always come back paused so the player explicitly resumes.
         this._state = this.PAUSE_STATE;
@@ -2915,17 +2961,26 @@ class DrawEngine {
             }
             const alpha = t < 0.25 ? t * 4 : 1;
             const cx = gScreenX / 2;
-            const cy = 200;
+            // Combo callouts ride above the regular "Daisy Chain!" banner so a
+            // chain that simultaneously empties a flower can show both cleanly.
+            const isPower = c.kind === "power";
+            const isCombo = c.kind === "combo";
+            const cy = isCombo ? 160 : 200;
             bufCtx.globalAlpha = alpha;
             bufCtx.translate(cx, cy);
             bufCtx.scale(scale, scale);
-            const isPower = c.kind === "power";
-            const fontSize = isPower ? 38 : 30;
+            const fontSize = isPower ? 38 : isCombo ? 36 : 30;
             bufCtx.font = "bold " + fontSize + "px " + DrawEngine.TITLE_FONT;
             const grad = bufCtx.createLinearGradient(0, -fontSize / 2, 0, fontSize / 2);
             if (isPower) {
                 grad.addColorStop(0, "#FFD86F");
                 grad.addColorStop(1, "#E84393");
+            }
+            else if (isCombo) {
+                // Warm gold → coral so the multiplier reads as a "hot streak"
+                // dopamine hit, distinct from the pink/white flower-clear banner.
+                grad.addColorStop(0, "#FFE56B");
+                grad.addColorStop(1, "#E25E2A");
             }
             else {
                 grad.addColorStop(0, "#FFFFFF");

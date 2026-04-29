@@ -726,6 +726,124 @@ test("DaisyGame: init/playPuzzleLevel reset the gold cooldown and active record"
   assert.equal(g.activeGolden(), null);
 });
 
+// ---------- Puzzle chain combo ----------
+
+// Stages a single matchable color-3 pair: F0 leaf 5 + F1 leaf 3, both alive.
+// One CW turn of F0 lands the F0 leaf at slot 0, completing the [0, 13]
+// pair from _leafMap.
+function stagePuzzlePair(g, color) {
+  const flowers = g.getFlowers();
+  for (const f of flowers) {
+    for (let i = 0; i < 6; i++) {
+      f.leaf[i]._color = 0;
+      f.leaf[i]._life = 0;
+    }
+  }
+  flowers[0].set_direction(1);
+  flowers[0].leaf[5]._color = color;
+  flowers[0].leaf[5]._life = 15;
+  flowers[1].leaf[3]._color = color;
+  flowers[1].leaf[3]._life = 15;
+}
+
+test("DaisyGame: puzzle combo: first match scores at 1.0x", () => {
+  const g = fresh();
+  g.playPuzzleLevel(1);
+  stagePuzzlePair(g, 3);
+  const before = g.score();
+  g.turnFlower(0);
+  // Color-3 pair: 2 + 3 = 5 base. First match is unboosted.
+  assert.equal(g.score() - before, 5);
+  assert.equal(g._comboMultiplier, 1.0);
+  assert.equal(g._comboCooldown > 0, true, "match arms the chain window");
+});
+
+test("DaisyGame: puzzle combo: second match within 1s scales by 1.2", () => {
+  const g = fresh();
+  g.playPuzzleLevel(1);
+  // Pretend the chain window is open from a prior match.
+  g._comboCooldown = 33;
+  g._comboMultiplier = 1.0;
+  stagePuzzlePair(g, 5); // base = 2 + 5 = 7
+  const before = g.score();
+  g.turnFlower(0);
+  // multiplier *= 1.2 → 1.2; floor(7 * 1.2) = 8.
+  assert.equal(g._comboMultiplier, 1.2);
+  assert.equal(g.score() - before, 8);
+});
+
+test("DaisyGame: puzzle combo: third match compounds to 1.44x", () => {
+  const g = fresh();
+  g.playPuzzleLevel(1);
+  // Two prior chain hits → multiplier already 1.2, window still open.
+  g._comboCooldown = 33;
+  g._comboMultiplier = 1.2;
+  stagePuzzlePair(g, 5); // base = 7
+  const before = g.score();
+  g.turnFlower(0);
+  // multiplier *= 1.2 → 1.44; floor(7 * 1.44) = 10.
+  assert.ok(Math.abs(g._comboMultiplier - 1.44) < 1e-9);
+  assert.equal(g.score() - before, 10);
+});
+
+test("DaisyGame: puzzle combo: chain breaks once the cooldown expires", () => {
+  const g = fresh();
+  g.playPuzzleLevel(1);
+  // Window already lapsed; the prior multiplier is stale and must reset.
+  g._comboCooldown = 0;
+  g._comboMultiplier = 2.0;
+  stagePuzzlePair(g, 3);
+  const before = g.score();
+  g.turnFlower(0);
+  assert.equal(g._comboMultiplier, 1.0, "expired window must reset to 1.0x");
+  assert.equal(g.score() - before, 5, "score reverts to the base value");
+});
+
+test("DaisyGame: combo cooldown decrements per tick and expires the multiplier", () => {
+  const g = fresh();
+  g.playPuzzleLevel(1);
+  g._comboCooldown = 5;
+  g._comboMultiplier = 1.5;
+  for (let i = 0; i < 5; i++) g.increaseTick();
+  assert.equal(g._comboCooldown, 0);
+  assert.equal(g._comboMultiplier, 1.0);
+});
+
+test("DaisyGame: arcade mode skips the combo multiplier", () => {
+  const g = fresh();
+  g.start(MODE_ARCADE);
+  // Even with chain window pre-armed, arcade plays at flat scoring.
+  g._comboCooldown = 33;
+  g._comboMultiplier = 2.0;
+  stagePuzzlePair(g, 3);
+  const before = g.score();
+  g.turnFlower(0);
+  assert.equal(g.score() - before, 5);
+  assert.equal(g._comboMultiplier, 2.0,
+    "arcade match must not bump the chain bookkeeping either");
+});
+
+test("DaisyGame: endless mode skips the combo multiplier", () => {
+  const g = fresh();
+  g.start(MODE_ENDLESS);
+  g._comboCooldown = 33;
+  g._comboMultiplier = 2.0;
+  stagePuzzlePair(g, 3);
+  const before = g.score();
+  g.turnFlower(0);
+  assert.equal(g.score() - before, 5);
+});
+
+test("DaisyGame: playPuzzleLevel resets the combo state", () => {
+  const g = fresh();
+  g.playPuzzleLevel(1);
+  g._comboCooldown = 30;
+  g._comboMultiplier = 3.0;
+  g.playPuzzleLevel(2);
+  assert.equal(g._comboCooldown, 0);
+  assert.equal(g._comboMultiplier, 1.0);
+});
+
 test("DaisyGame: serialize pre-expires an active gold pair (transformed → reverted)", () => {
   const g = fresh();
   g.start();
