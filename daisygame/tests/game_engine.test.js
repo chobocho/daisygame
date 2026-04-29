@@ -5,7 +5,7 @@ const { loadGame } = require("./_bootstrap");
 
 const {
   GameEngine, DaisyGame, LocalDB,
-  MODE_ARCADE, MODE_ENDLESS,
+  MODE_ARCADE, MODE_ENDLESS, MODE_PUZZLE,
   _store,
 } = loadGame();
 
@@ -92,4 +92,17 @@ test("GameEngine.gotoLevelSelect: from puzzle PAUSE returns to LEVEL_SELECT and 
   assert.equal(game.isLevelSelectState(), true);
   assert.equal(db.getResume(), null);
   assert.equal(game.score(), 0);
+});
+
+// Regression: the puzzle level-select screen has its own Main Menu button
+// that emits MENU_KEY (see DrawEngine._hitLevelSelect). main.js used to gate
+// MENU_KEY on PAUSE only, leaving the level-select Main Menu button silently
+// dead. Verify gotoMenu() from LEVEL_SELECT lands on IDLE — the contract
+// main.js now relies on.
+test("GameEngine.gotoMenu: from LEVEL_SELECT returns to IDLE state", () => {
+  const { game, eng } = build();
+  game.start(MODE_PUZZLE);
+  assert.equal(game.isLevelSelectState(), true);
+  eng.gotoMenu();
+  assert.equal(game.isIdleState(), true);
 });

@@ -3255,7 +3255,10 @@ function processKeyEvent(code) {
       break;
     case 27: // Escape
     case MENU_KEY:
-      if (daisyGame.isPauseState()) {
+      // Reachable from PAUSE (overlay) and LEVEL_SELECT (Main Menu button on
+      // the puzzle grid). Both paths should drop back to the IDLE mode-pick
+      // screen via gameEngine.gotoMenu().
+      if (daisyGame.isPauseState() || daisyGame.isLevelSelectState()) {
         gameEngine.gotoMenu();
       }
       break;
