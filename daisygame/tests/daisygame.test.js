@@ -844,6 +844,133 @@ test("DaisyGame: playPuzzleLevel resets the combo state", () => {
   assert.equal(g._comboMultiplier, 1.0);
 });
 
+test("DaisyGame: init resets the combo state", () => {
+  const g = fresh();
+  g.playPuzzleLevel(1);
+  g._comboCooldown = 30;
+  g._comboMultiplier = 2.5;
+  g.init();
+  assert.equal(g._comboCooldown, 0);
+  assert.equal(g._comboMultiplier, 1.0);
+});
+
+test("DaisyGame: restore resets the combo state on the destination game", () => {
+  const a = fresh();
+  a.playPuzzleLevel(1);
+  const snap = a.serialize();
+  const b = fresh();
+  // Pre-pollute with a stale chain — restore must reset it.
+  b._comboCooldown = 99;
+  b._comboMultiplier = 99;
+  assert.equal(b.restore(snap), true);
+  assert.equal(b._comboCooldown, 0);
+  assert.equal(b._comboMultiplier, 1.0);
+});
+
+test("DaisyGame: a non-matching turn doesn't bump the combo multiplier", () => {
+  const g = fresh();
+  g.playPuzzleLevel(1);
+  g._comboCooldown = 33;
+  g._comboMultiplier = 1.2;
+  // Empty board → turnFlower yields no match (and triggers _fillEmptySlots,
+  // which doesn't touch combo state).
+  for (const f of g.getFlowers()) {
+    for (let i = 0; i < 6; i++) {
+      f.leaf[i]._color = 0;
+      f.leaf[i]._life = 0;
+    }
+  }
+  g.turnFlower(0);
+  assert.equal(g._comboMultiplier, 1.2, "no-match turn must not compound the multiplier");
+  assert.equal(g._comboCooldown, 33, "no-match turn must not refresh the cooldown");
+});
+
+test("DaisyGame: combo cooldown freezes during pause", () => {
+  const g = fresh();
+  g.playPuzzleLevel(1);
+  g._comboCooldown = 20;
+  g._comboMultiplier = 1.5;
+  g.pause();
+  // increaseTick is a no-op outside PLAY state.
+  for (let i = 0; i < 50; i++) g.increaseTick();
+  assert.equal(g._comboCooldown, 20);
+  assert.equal(g._comboMultiplier, 1.5);
+});
+
+test("DaisyGame: a boosted match emits a 'combo' callout", () => {
+  const g = fresh();
+  g.playPuzzleLevel(1);
+  g._comboCooldown = 33;
+  g._comboMultiplier = 1.0;
+  Effects.reset();
+  stagePuzzlePair(g, 3);
+  g.turnFlower(0);
+  const combo = Effects.callouts.find(c => c.kind === "combo");
+  assert.ok(combo, "boosted combo must produce a combo callout");
+  assert.equal(combo.text, "x1.20");
+});
+
+test("DaisyGame: an unboosted (1.0x) match emits no combo callout", () => {
+  const g = fresh();
+  g.playPuzzleLevel(1);
+  Effects.reset();
+  stagePuzzlePair(g, 3);
+  g.turnFlower(0);
+  const combo = Effects.callouts.find(c => c.kind === "combo");
+  assert.equal(combo, undefined, "1.0x first match must not emit a combo callout");
+});
+
+test("DaisyGame: a boosted score popup uses a coral color", () => {
+  const g = fresh();
+  g.playPuzzleLevel(1);
+  g._comboCooldown = 33;
+  g._comboMultiplier = 1.0;
+  Effects.reset();
+  stagePuzzlePair(g, 3);
+  g.turnFlower(0);
+  const popup = Effects.popups[Effects.popups.length - 1];
+  assert.ok(popup, "match must produce a score popup");
+  assert.equal(popup.color, "#E25E2A",
+    "boosted popup must use the coral combo color");
+});
+
+test("DaisyGame: a non-boosted score popup keeps the default dark color", () => {
+  const g = fresh();
+  g.playPuzzleLevel(1);
+  Effects.reset();
+  stagePuzzlePair(g, 3);
+  g.turnFlower(0);
+  const popup = Effects.popups[Effects.popups.length - 1];
+  assert.ok(popup);
+  assert.equal(popup.color, "#3a2a18");
+});
+
+test("DaisyGame: matching a gold pair counts as a combo step", () => {
+  const g = fresh();
+  g.playPuzzleLevel(1);
+  // Pre-arm the chain so the gold match scores at 1.2x.
+  g._comboCooldown = 33;
+  g._comboMultiplier = 1.0;
+  const flowers = g.getFlowers();
+  for (const f of flowers) {
+    for (let i = 0; i < 6; i++) {
+      f.leaf[i]._color = 0;
+      f.leaf[i]._life = 0;
+    }
+  }
+  flowers[0].set_direction(1);
+  flowers[0].leaf[5].setGolden(null);
+  flowers[0].leaf[5]._life = 15;
+  flowers[1].leaf[3].setGolden(null);
+  flowers[1].leaf[3]._life = 15;
+  g._activeGolden = { ticksLeft: 100 };
+  const before = g.score();
+  g.turnFlower(0);
+  // Gold pair = 9 base; 1.2x → floor(9 * 1.2) = 10.
+  assert.equal(g._comboMultiplier, 1.2);
+  assert.equal(g.score() - before, 10);
+});
+
 test("DaisyGame: serialize pre-expires an active gold pair (transformed → reverted)", () => {
   const g = fresh();
   g.start();
