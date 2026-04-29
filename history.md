@@ -1376,7 +1376,56 @@ if (this._mode === this.MODE_PUZZLE && !this._hasMatchablePair()) {
 
 기존 황금 관련 테스트(매치된 페어가 `_activeGolden`을 즉시 비움, 콤보 카운트, 자연 만료, transformed/empty-fill 만료)는 모두 그대로 통과 — 매치된 잎은 `isAlive() === false`이므로 새 `_expireGolden` 가드에 걸려 건드려지지 않는다.
 
-## 38. 후속 후보
+## 38. 빈 꽃 풀 리필 (6장 보장)
+
+요청: "모든 잎사귀를 없애서 잎사귀를 채울때 6장 모두 채우도록 개선해 주세요."
+
+### 38.1 원인
+
+기존 `increaseTick`의 리필 트리거는 단순한 한-틱 검사였다:
+
+```js
+if (f.leaf_count() == 0) {
+    for (let i = 0; i < 6; i++) f.addLeaf(this._flowerArr);
+}
+```
+
+`addLeaf`는 `color() === 0`인 슬롯만 채운다. 매치 후 잎은 `_life`만 줄어들 뿐 `_color`는 즉시 0이 되지 않고 `_origin_life=15` 틱 동안 shrink 애니메이션을 거친다. 매치가 여러 회전에 걸쳐 일어나는 실제 플레이에서는:
+
+1. 처음 3장 매치 → 3장 shrink 시작.
+2. 8틱쯤 뒤 나머지 3장 매치 → leaf_count=0, 하지만 처음 3장은 거의 다 줄어들었고 나머지 3장은 막 줄어들기 시작한 상태.
+3. leaf_count==0 트리거가 발동, addLeaf 6번 호출 → 모든 슬롯이 color>0 (shrink 중) 이라 전부 no-op.
+4. 5틱쯤 뒤 처음 3장이 color=0에 도달, leaf_count는 여전히 0. 이번 틱의 검사가 발동해 그 3장만 채워짐. leaf_count=3.
+5. 그 후 나머지 3장이 shrink 끝나도 leaf_count=0 트리거가 더 이상 발동하지 않음(이미 leaf_count=3).
+6. 결과: 슬롯 3–5가 빈 채로 남고, 느린 cadence(`_addLeaf`, ~60틱마다 한 장)만 천천히 채움.
+
+### 38.2 수정 (`flower.js`, `daisygame.js`)
+
+`Flower`에 `_pendingRefill` 플래그를 추가. `increaseTick`에서:
+
+```js
+if (f.leaf_count() === 0) f._pendingRefill = true;
+if (f._pendingRefill) {
+    for (let i = 0; i < 6; i++) f.addLeaf(this._flowerArr);
+    if (f.leaf_count() === 6) f._pendingRefill = false;
+}
+```
+
+플래그는 leaf_count가 0에 닿는 순간 켜지고, 6에 도달할 때까지 매 틱 빈 슬롯을 채운다. shrink 중인 슬롯은 자연히 시간이 지나며 비워지고, 비워지자마자 다음 틱에 즉시 채워진다.
+
+### 38.3 직렬화
+
+`Flower.serialize` / `restore`에 `pendingRefill` 필드 추가. 게임 일시정지 후 재개 시 진행 중이던 리필이 끊기지 않도록.
+
+### 38.4 테스트
+
+- `flower.test.js`: `_pendingRefill` 기본값이 false인지, serialize 라운드트립이 true/false 모두 보존하는지.
+- `daisygame.test.js`:
+  - 일괄 매치 — 6장 동시 제거 후 30틱 뒤 leaf_count=6, 모든 슬롯이 색상 보유.
+  - 시차 매치 — 3장 제거 → 8틱 → 3장 제거 시나리오에서 30틱 뒤 leaf_count=6.
+  - 부분 매치 — 4장만 제거하면 `_pendingRefill`이 켜지지 않음(slow cadence가 처리).
+
+## 39. 후속 후보
 
 - 남은 JS 파일들도 점진적으로 .ts로 이식 (현재는 ambient 선언으로 우회 중)
 - `flower.js` / `leaf.js` 인덱스 0–6 / 1–6 매핑을 자료구조로 분리해 가독성 정리

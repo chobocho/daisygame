@@ -120,3 +120,21 @@ test("Flower: is_inside scales with gScale and gStartX", () => {
   assert.equal(f.is_inside(cx + 55, cy, gStartX, gScale), true);
   assert.equal(f.is_inside(cx + 65, cy, gStartX, gScale), false);
 });
+
+test("Flower: pendingRefill defaults to false", () => {
+  const f = new Flower(0);
+  assert.equal(f._pendingRefill, false);
+});
+
+test("Flower: serialize / restore round-trips pendingRefill", () => {
+  const a = new Flower(0);
+  a._pendingRefill = true;
+  const b = new Flower(1);
+  b.restore(a.serialize());
+  assert.equal(b._pendingRefill, true);
+
+  a._pendingRefill = false;
+  const c = new Flower(2);
+  c.restore(a.serialize());
+  assert.equal(c._pendingRefill, false);
+});

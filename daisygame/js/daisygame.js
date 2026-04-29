@@ -566,11 +566,20 @@ class DaisyGame {
         // Cap per-tick refill at 21 (3.5 flowers' worth) so puzzle levels
         // with N >= 4 don't exceed the board's headroom every frame.
         const refillThreshold = Math.min(21, this._flowerArr.length * 3);
+        // A flower whose leaf_count hits 0 enters "full refill" mode and
+        // stays there until all 6 slots are populated. We can't fill a slot
+        // whose leaf is mid-shrink (color > 0 with life decaying) — addLeaf
+        // skips it. Without the persistent flag, slots that finish shrinking
+        // *after* the leaf_count == 0 tick would never be refilled by this
+        // path (leaf_count is now > 0) and only the slow cadence would fill
+        // them, leaving 1–5 empty slots for many seconds.
         this._flowerArr.forEach(f => {
-            if (f.leaf_count() == 0) {
+            if (f.leaf_count() === 0) f._pendingRefill = true;
+            if (f._pendingRefill) {
                 for (let i = 0; i < 6; i++) {
                     f.addLeaf(this._flowerArr);
                 }
+                if (f.leaf_count() === 6) f._pendingRefill = false;
             }
             leaf_count += f.leaf_count();
         });

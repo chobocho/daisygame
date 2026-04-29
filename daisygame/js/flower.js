@@ -13,6 +13,11 @@ class Flower {
         // unshift(pop())), -1 = counter-clockwise (push(shift())).
         // Crazy Daisy mixes both flower types on the board.
         this._direction = 1;
+        // Set when leaf_count drops to 0 so DaisyGame's increaseTick keeps
+        // refilling empty slots until all 6 are populated. Stays true even
+        // after some slots fill, because mid-shrink slots become available
+        // only as their dying animation completes.
+        this._pendingRefill = false;
         this.init_leaf();
     }
 
@@ -84,6 +89,7 @@ class Flower {
             smallRadius: this._small_radius,
             leafCount: this._leaf_count,
             direction: this._direction,
+            pendingRefill: this._pendingRefill,
             leaves: this.leaf.map(l => l.serialize()),
         };
     }
@@ -99,6 +105,7 @@ class Flower {
         if (typeof d.direction === 'number') {
             this._direction = (d.direction === -1) ? -1 : 1;
         }
+        this._pendingRefill = !!d.pendingRefill;
         for (let i = 0; i < 6; i++) {
             this.leaf[i].restore(d.leaves[i]);
         }

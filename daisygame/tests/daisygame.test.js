@@ -474,6 +474,59 @@ test("DaisyGame: endless mode does refill cleared flowers", () => {
   assert.ok(flowers[0].leaf_count() > 0, "endless must refill an empty flower");
 });
 
+test("DaisyGame: a fully cleared flower refills to 6 leaves once shrink finishes", () => {
+  const g = fresh();
+  g.start(MODE_ENDLESS);
+  const flowers = g.getFlowers();
+  for (let i = 0; i < 6; i++) flowers[0].remove(i);
+  // _origin_life=15, plus one tick for the refill pass to land — 30 ticks
+  // is comfortably past both. Without the persistent refill flag, slots
+  // that finish shrinking after the leaf_count==0 tick would stay empty.
+  for (let i = 0; i < 30; i++) g.increaseTick();
+  assert.equal(flowers[0].leaf_count(), 6,
+    "a cleared flower must end up with all 6 slots filled");
+  for (let i = 0; i < 6; i++) {
+    assert.ok(flowers[0].leaf[i].color() > 0,
+      `slot ${i} must hold a non-empty leaf after refill`);
+  }
+});
+
+test("DaisyGame: staggered clears still produce a full 6-leaf refill", () => {
+  // Match-removals in real play happen across multiple rotations, so the
+  // shrink animations on the slots overlap. The bug was that the refill
+  // trigger (leaf_count == 0) only fires for the tick the count actually
+  // hits zero — slots whose shrink finishes later never got refilled.
+  const g = fresh();
+  g.start(MODE_ENDLESS);
+  const flowers = g.getFlowers();
+  for (let i = 0; i < 3; i++) flowers[0].remove(i);
+  for (let t = 0; t < 8; t++) g.increaseTick(); // first 3 partway through shrink
+  for (let i = 3; i < 6; i++) flowers[0].remove(i);
+  // Now leaf_count drops to 0 with three slots fresh-shrinking and three
+  // mid-shrink. Need ~22 ticks for the youngest dying leaves to clear and
+  // the persistent refill to top them off.
+  for (let t = 0; t < 30; t++) g.increaseTick();
+  assert.equal(flowers[0].leaf_count(), 6,
+    "staggered clears must still refill the flower to 6 leaves");
+  for (let i = 0; i < 6; i++) {
+    assert.ok(flowers[0].leaf[i].color() > 0,
+      `slot ${i} must be filled after staggered clear`);
+  }
+});
+
+test("DaisyGame: a partial clear (not all 6) does NOT trigger the full-refill flag", () => {
+  // The flag should only arm on a true 0-leaf event; otherwise normal
+  // cadence handles the gradual top-up.
+  const g = fresh();
+  g.start(MODE_ENDLESS);
+  const flowers = g.getFlowers();
+  for (let i = 0; i < 4; i++) flowers[0].remove(i);
+  g.increaseTick();
+  assert.equal(flowers[0]._pendingRefill, false,
+    "leaf_count > 0 must not arm the persistent refill flag");
+});
+
+
 // ---------- puzzle mode levels ----------
 
 test("DaisyGame: start(MODE_PUZZLE) enters LEVEL_SELECT instead of PLAY", () => {
