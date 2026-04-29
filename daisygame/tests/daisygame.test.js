@@ -316,21 +316,35 @@ test("DaisyGame: pausing then starting (no arg) resumes same mode without resett
   assert.equal(g.isPlayState(), true);
 });
 
-test("DaisyGame: puzzle increaseTick refills a partially empty flower in one tick", () => {
-  // The player matches a pair → two slots empty after the death animation.
-  // The pre-existing _addLeaf cadence trickles in at most one leaf per ~1.8s,
-  // which feels laggy. Puzzle mode must top the board up immediately on the
-  // very next tick so play stays continuous.
+test("DaisyGame: puzzle increaseTick keeps a partial empty as-is while the board is still playable", () => {
+  // After a match, the slow _addLeaf cadence handles the refill — the
+  // immediate-refill path only triggers when no matchable pair exists.
   const g = fresh();
   g.playPuzzleLevel(1);
   const flowers = g.getFlowers();
   flowers[0].leaf[2]._color = 0;
   flowers[0].leaf[2]._life = 0;
   flowers[0]._leaf_count = 5;
+  // _isPlayable returns true (any flower with leaf_count < 6 is playable),
+  // so the gate skips the auto-refill.
   g.increaseTick();
-  assert.equal(flowers[0]._leaf_count, 6);
+  assert.equal(flowers[0].leaf[2].color(), 0,
+    "playable boards must wait for the slow cadence, not auto-refill");
+});
+
+test("DaisyGame: puzzle increaseTick auto-refills only when no matchable pair exists", () => {
+  const g = fresh();
+  g.playPuzzleLevel(1);
+  const flowers = g.getFlowers();
+  flowers[0].leaf[2]._color = 0;
+  flowers[0].leaf[2]._life = 0;
+  flowers[0]._leaf_count = 5;
+  // Force the stuck branch — the gated refill should now fire.
+  g._isPlayable = () => false;
+  g.increaseTick();
   assert.notEqual(flowers[0].leaf[2].color(), 0,
-    "puzzle auto-refill must repopulate the empty slot in one tick");
+    "stuck-board (no matchable pair) must auto-refill empties");
+  assert.equal(flowers[0]._leaf_count, 6);
 });
 
 test("DaisyGame: endless increaseTick does NOT auto-refill an isolated empty slot", () => {
@@ -342,9 +356,9 @@ test("DaisyGame: endless increaseTick does NOT auto-refill an isolated empty slo
   flowers[0].leaf[2]._color = 0;
   flowers[0].leaf[2]._life = 0;
   flowers[0]._leaf_count = 5;
+  // Natural state: _isPlayable returns true (one flower has leaf_count < 6),
+  // so neither the puzzle gate nor the rainbow-stuck branch fires.
   g.increaseTick();
-  // Total leaf_count = 41 (6*6 + 5) > refillThreshold 21, _tick=1 < 60,
-  // so neither the empty-flower refill nor the cadenced _addLeaf fires.
   assert.equal(flowers[0].leaf[2].color(), 0,
     "endless mode must let the slow cadence handle refills");
 });
@@ -355,7 +369,8 @@ test("DaisyGame: puzzle auto-refill leaves rainbow / gold leaves untouched", () 
   const flowers = g.getFlowers();
   flowers[0].leaf[0].setRainbow();
   flowers[1].leaf[3].setGolden(null);
-  // No empty slots to fill — refill should be a no-op and special leaves stay.
+  // Force the gated refill so we exercise the path even on a full board.
+  g._isPlayable = () => false;
   g.increaseTick();
   assert.equal(flowers[0].leaf[0].isRainbow(), true);
   assert.equal(flowers[1].leaf[3].isGolden(), true);
@@ -369,6 +384,7 @@ test("DaisyGame: puzzle auto-refill respects the death animation (skips life > 0
   const flowers = g.getFlowers();
   flowers[0].leaf[2]._life = 5; // dying — life < origin, color preserved
   const dyingColor = flowers[0].leaf[2]._color;
+  g._isPlayable = () => false;  // force the gated refill path
   g.increaseTick();
   assert.equal(flowers[0].leaf[2]._color, dyingColor,
     "dying leaf must not be overwritten by the auto-refill");

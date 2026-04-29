@@ -1374,11 +1374,11 @@ class DaisyGame {
             this._addLeaf();
         }
 
-        // Puzzle mode keeps the board topped up every tick so the player
-        // isn't waiting between matches. Only color === 0 slots are
-        // touched, so dying leaves (life > 0) and rainbow / gold leaves
-        // sit through the auto-refill untouched.
-        if (this._mode === this.MODE_PUZZLE) {
+        // Puzzle mode: when the board has no matchable pair at all, force
+        // a refill so the player isn't soft-locked. As long as a match is
+        // still achievable through rotation, fall back to the standard
+        // slow cadence used by arcade / endless.
+        if (this._mode === this.MODE_PUZZLE && !this._isPlayable()) {
             this._fillEmptySlots();
         }
 
