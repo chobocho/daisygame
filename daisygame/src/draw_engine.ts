@@ -544,14 +544,17 @@ class DrawEngine {
     bufCtx.fillText(line2, 200, 200);
     bufCtx.restore();
 
-    // Buttons: Next (if cleared) / Retry / Main Menu.
+    // Buttons: Next (if cleared) / Retry / Level Select / Main Menu.
     if (cleared && lvl < Puzzle.MAX_LEVEL) {
       this._drawModeButton(200, 250, 95, 22, "Next Level", "\u23ED\uFE0F", "#A6E0A6", "#3F9E5C"); // ⏭️
       this._drawModeButton(200, 305, 95, 22, "Retry", "\u{1F501}", "#FFB179", "#E25E2A"); // 🔁
+      this._drawModeButton(200, 360, 95, 22, "Level Select", "\u{1F9E9}", "#A6BFF7", "#5C7DD6"); // 🧩
+      this._drawMenuButton(200, 415, 85, 22);
     } else {
       this._drawModeButton(200, 280, 95, 22, "Retry", "\u{1F501}", "#FFB179", "#E25E2A");
+      this._drawModeButton(200, 335, 95, 22, "Level Select", "\u{1F9E9}", "#A6BFF7", "#5C7DD6"); // 🧩
+      this._drawMenuButton(200, 390, 85, 22);
     }
-    this._drawMenuButton(200, 380, 85, 22);
   }
 
   private _drawModeButtons(): void {
@@ -989,11 +992,13 @@ class DrawEngine {
     const cleared = this.game.score() >= cfg.target;
     const halfW = 95;
     const halfH = 22;
+    const bx1 = gStartX + (200 - halfW) * gScale;
+    const bx2 = gStartX + (200 + halfW) * gScale;
 
+    let levelSelectY: number;
+    let menuY: number;
     if (cleared && lvl < Puzzle.MAX_LEVEL) {
       // Next at (200, 250)
-      let bx1 = gStartX + (200 - halfW) * gScale;
-      let bx2 = gStartX + (200 + halfW) * gScale;
       let by1 = (250 - halfH) * gScale;
       let by2 = (250 + halfH) * gScale;
       if (x > bx1 && x < bx2 && y > by1 && y < by2) return NEXT_LEVEL_KEY;
@@ -1001,19 +1006,25 @@ class DrawEngine {
       by1 = (305 - halfH) * gScale;
       by2 = (305 + halfH) * gScale;
       if (x > bx1 && x < bx2 && y > by1 && y < by2) return S_KEY;
+      levelSelectY = 360;
+      menuY = 415;
     } else {
       // Retry at (200, 280)
-      const bx1 = gStartX + (200 - halfW) * gScale;
-      const bx2 = gStartX + (200 + halfW) * gScale;
       const by1 = (280 - halfH) * gScale;
       const by2 = (280 + halfH) * gScale;
       if (x > bx1 && x < bx2 && y > by1 && y < by2) return S_KEY;
+      levelSelectY = 335;
+      menuY = 390;
     }
-    // Main Menu at (200, 380) halfW=85 halfH=22
+    // Level Select
+    const lby1 = (levelSelectY - halfH) * gScale;
+    const lby2 = (levelSelectY + halfH) * gScale;
+    if (x > bx1 && x < bx2 && y > lby1 && y < lby2) return LEVEL_SELECT_KEY;
+    // Main Menu (halfW=85, halfH=22)
     const mbx1 = gStartX + (200 - 85) * gScale;
     const mbx2 = gStartX + (200 + 85) * gScale;
-    const mby1 = (380 - 22) * gScale;
-    const mby2 = (380 + 22) * gScale;
+    const mby1 = (menuY - 22) * gScale;
+    const mby2 = (menuY + 22) * gScale;
     if (x > mbx1 && x < mbx2 && y > mby1 && y < mby2) return MENU_KEY;
     return 0;
   }

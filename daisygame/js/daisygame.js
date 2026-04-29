@@ -251,11 +251,12 @@ class DaisyGame {
         }
 
         // Per-pair score: explicit table indexed by leaf color (1..7).
-        // The ramp steepens past color 4 so rare high-color matches in the
-        // puzzle endgame pay off enough to actually clear targets. Rainbow
-        // is a wildcard for any color (flat 7); gold is narrower — only
-        // matches gold or rainbow — and rewards 16.
-        const COLOR_PAIR_SCORE = [0, 1, 2, 4, 6, 8, 10, 12];
+        // Low colors (1..3) start at 3 so early puzzle levels — which only
+        // surface 4 colors — don't grind. Past color 4 the ramp jumps by 2
+        // so rare high-color matches in the puzzle endgame still pay off.
+        // Rainbow is a wildcard for any color (flat 7); gold is narrower —
+        // only matches gold or rainbow — and rewards 16.
+        const COLOR_PAIR_SCORE = [0, 3, 4, 5, 6, 8, 10, 12];
         const RAINBOW_PAIR_SCORE = 7;
         const GOLDEN_PAIR_SCORE = 16;
 

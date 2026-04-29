@@ -18,13 +18,22 @@ test("Puzzle.levelConfig: level 1 has 2 flowers, 4 colors, 60s, target 50", () =
   assert.equal(c.target, 50);
 });
 
-test("Puzzle.levelConfig: level 100 has 7 flowers, 7 colors, 60s, target 5000", () => {
+test("Puzzle.levelConfig: level 100 has 7 flowers, 7 colors, 60s, target 3515", () => {
   const c = Puzzle.levelConfig(100);
   assert.equal(c.level, 100);
   assert.equal(c.flowers, 7);
   assert.equal(c.colors, 7);
   assert.equal(c.timeSeconds, 60);
-  assert.equal(c.target, 5000);
+  // 50 + 35*99 = 3515.
+  assert.equal(c.target, 3515);
+});
+
+test("Puzzle.levelConfig: target ramps linearly at +35/level from a base of 50", () => {
+  // Sample the curve so a future tweak (e.g. swapping the slope) is loud.
+  assert.equal(Puzzle.levelConfig(1).target, 50);
+  assert.equal(Puzzle.levelConfig(2).target, 85);
+  assert.equal(Puzzle.levelConfig(10).target, 365);
+  assert.equal(Puzzle.levelConfig(50).target, 1765);
 });
 
 test("Puzzle.levelConfig: time limit is flat 60 seconds across all levels", () => {
@@ -117,7 +126,7 @@ test("PuzzleProgress: best score only improves", () => {
 test("PuzzleProgress: persistence across instances", () => {
   const a = new PuzzleProgress();
   a.recordResult(1, 80);
-  a.recordResult(2, 110); // L2 target 100, cleared
+  a.recordResult(2, 110); // L2 target 85, cleared
   const b = new PuzzleProgress();
   assert.equal(b.unlocked(), 3);
   assert.equal(b.bestScore(1), 80);
@@ -155,4 +164,36 @@ test("PuzzleProgress: stars(level) reflects best vs target", () => {
   assert.equal(p.stars(1), 2); // 75 ≤ 80 < 100
   p.recordResult(1, 200);
   assert.equal(p.stars(1), 3); // ≥ 100
+});
+
+// ---------- New target curve regression guards ----------
+//
+// L2 sat at target 100 under the old 50*level ramp; the rebalance dropped
+// it to 85. A score of 84 must remain failed (no unlock), 85 must clear.
+// If a future tweak silently slides the slope back toward 50/level these
+// will fail loudly.
+test("PuzzleProgress: L2 score 84 stays locked under the new target (85)", () => {
+  const p = new PuzzleProgress();
+  p.recordResult(1, 100); // unlock L2
+  p.recordResult(2, 84);
+  assert.equal(p.unlocked(), 2, "L3 must NOT unlock — 84 < 85 target");
+  assert.equal(p.bestScore(2), 84);
+  assert.equal(p.stars(2), 0, "below target = 0 stars");
+});
+
+test("PuzzleProgress: L2 score 85 unlocks L3 (target = 50 + 35*1)", () => {
+  const p = new PuzzleProgress();
+  p.recordResult(1, 100);
+  p.recordResult(2, 85);
+  assert.equal(p.unlocked(), 3);
+  assert.equal(p.stars(2), 1);
+});
+
+test("Puzzle.starRating: L100 boundary uses new target 3515, not 5000", () => {
+  // At L100 score 3514 must still read failed (0 stars); 3515 = 1 star.
+  // Catches a regression where someone restores the old 50*level slope
+  // but forgets to re-tune starRating, or vice-versa.
+  const cfg = Puzzle.levelConfig(100);
+  assert.equal(Puzzle.starRating(3514, cfg.target), 0);
+  assert.equal(Puzzle.starRating(3515, cfg.target), 1);
 });

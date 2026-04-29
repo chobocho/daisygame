@@ -9,7 +9,9 @@ class Puzzle {
     //   flowers: 2 → 7 in steps of 17 levels
     //   colors:  4 → 7 in steps of 33 levels
     //   time:    flat 60s for every level (snappy round, predictable pacing)
-    //   target:  50 * level (L1 = 50, L100 = 5000)
+    //   target:  50 + 35*(level-1)  (L1 = 50, L100 = 3515) — gentler than
+    //            a pure 50*level ramp; mid-levels are reachable without the
+    //            color count having to step up first.
     static levelConfig(level) {
         const L = Math.max(1, Math.min(Puzzle.MAX_LEVEL, level | 0));
         return {
@@ -17,7 +19,7 @@ class Puzzle {
             flowers: Math.min(7, 2 + Math.floor((L - 1) / 17)),
             colors:  Math.min(7, 4 + Math.floor((L - 1) / 33)),
             timeSeconds: 60,
-            target: 50 * L,
+            target: 50 + 35 * (L - 1),
         };
     }
 

@@ -1425,7 +1425,130 @@ if (f._pendingRefill) {
   - 시차 매치 — 3장 제거 → 8틱 → 3장 제거 시나리오에서 30틱 뒤 leaf_count=6.
   - 부분 매치 — 4장만 제거하면 `_pendingRefill`이 켜지지 않음(slow cadence가 처리).
 
-## 39. 후속 후보
+## 39. 퍼즐 게임오버 메인 메뉴 버튼이 클릭되지 않던 버그
+
+요청: "퍼즐 모드에서 실패시 나오는 메뉴에서 메인 메뉴로 버튼 클릭 안됨."
+
+### 39.1 원인
+
+`_drawPuzzleGameOver`는 (200, 380)에 메인 메뉴 버튼을 그리고, `_hitPuzzleGameOver`도 동일 좌표를 히트 테스트해 `MENU_KEY`를 반환하고 있었다. 그러나 `main.js`의 `MENU_KEY` 처리는 다음과 같았다:
+
+```js
+case MENU_KEY:
+  if (daisyGame.isPauseState() || daisyGame.isLevelSelectState()) {
+    gameEngine.gotoMenu();
+  }
+  break;
+```
+
+게임오버 상태가 가드에 빠져 있어, 퍼즐 게임오버 화면에서만 버튼이 묵묵부답인 무반응 버튼이 되었다. 아케이드/엔드리스 게임오버는 mode 버튼 영역을 먼저 매칭하므로 영향 없었다.
+
+### 39.2 수정 (`main.js`)
+
+가드에 `daisyGame.isGameOverState()`를 추가. `gameEngine.gotoMenu()`는 상태 무관하게 동작(모든 분기에서 `init()` 호출)하므로 부수효과 없음.
+
+## 40. 퍼즐 게임오버에 Level Select 버튼 추가
+
+요청: "퍼즐 모드에서 실패시 나오는 메뉴에서 레벨 선택 화면으로 가는 버튼도 있어야 함."
+
+### 40.1 레이아웃 (`src/draw_engine.ts`)
+
+기존 `_drawPuzzleGameOver`는 cleared면 Next/Retry/Menu 3버튼, 실패면 Retry/Menu 2버튼을 그렸다. 일시정지 화면이 이미 사용하는 🧩 Level Select 버튼 스타일을 그대로 재사용:
+
+- **Cleared (4버튼)**: Next 250 / Retry 305 / Level Select 360 / Main Menu 415
+- **Failed (3버튼)**: Retry 280 / Level Select 335 / Main Menu 390
+
+세로 간격 55px는 기존 cleared 레이아웃의 컨벤션.
+
+### 40.2 히트 테스트 정리 (`_hitPuzzleGameOver`)
+
+기존 분기마다 좌표를 중복 작성하던 부분을 정리하면서 Level Select 영역을 추가. 두 분기 끝에서 공통으로 Level Select(`LEVEL_SELECT_KEY`)와 Main Menu(`MENU_KEY`)를 차례로 검사.
+
+### 40.3 라우팅 (`main.js`)
+
+`LEVEL_SELECT_KEY` 핸들러가 PAUSE만 통과시키던 가드를 확장:
+
+```js
+case LEVEL_SELECT_KEY:
+  if (daisyGame.isPauseState() || daisyGame.isGameOverState()) {
+    gameEngine.gotoLevelSelect();
+  }
+  break;
+```
+
+`gameEngine.gotoLevelSelect()` → `daisyGame.exitToLevelSelect()`는 점수와 타이머를 리셋하고 LEVEL_SELECT_STATE로 진입. resume snapshot도 함께 비움.
+
+## 41. 퍼즐 난이도 재밸런스 — 저색상 + 타겟 곡선
+
+요청: "퍼즐 모드에서 점수가 너무 안올라서 난이도가 너무 증가했어."
+
+### 41.1 진단
+
+직전 36장 리밸런스(`978e4de`)는 엔드게임 페이오프를 살리려고 색상별 페어 점수를 `[0,1,2,4,6,8,10,12]`로 잡았다. 하지만:
+
+- 초·중반은 4~5색 보드라 평균 페어 점수가 오히려 **떨어짐** (L1~33 4색 평균 4.5 → 3.25)
+- 타겟은 `50 * level` 선형이라 L100 = 5000, 60초 안에는 사실상 도달 불가능
+
+### 41.2 수정
+
+**페어 점수 테이블 (`daisygame.js`)** — 저색상만 끌어올리고 고색상은 유지:
+
+```js
+const COLOR_PAIR_SCORE = [0, 3, 4, 5, 6, 8, 10, 12];
+```
+
+색1~3: 1·2·4 → 3·4·5 (초반 그라인딩 해소). 색4: 6 그대로. 색5~7: 8·10·12 그대로 (엔드게임 페이오프 보존).
+
+**타겟 곡선 (`puzzle.js`)** — 기울기 50 → 35 완화:
+
+```js
+target: 50 + 35 * (L - 1),
+```
+
+| Level | 이전 | 신규 |
+|-------|------|------|
+| 1     | 50   | 50   |
+| 10    | 500  | 365  |
+| 50    | 2500 | 1765 |
+| 100   | 5000 | 3515 |
+
+### 41.3 테스트 / 빌드 영향
+
+- `daisygame.test.js`: 색별 ramp 상수, 색-1 단독, 색-3 단독, 콤보(색3·5 베이스), arcade/endless 콤보 스킵 — 모두 새 값으로 갱신.
+- 회귀 가드 신규: "색1~3는 항상 ≥3", "색5~7는 8/10/12 고정".
+- `puzzle.test.js`: L100 target 5000 → 3515 단언 갱신, "타겟 +35/level 선형" 샘플 테스트 추가.
+- `PuzzleProgress` 회귀 가드 신규: L2 84점은 잠금 유지 / 85점은 L3 해금, L100 starRating 경계.
+- `release/index.html` 재빌드 (build.sh).
+
+## 42. 회귀 테스트 보강 (39·40·41 영향 영역)
+
+이번 세션의 세 변경(MENU_KEY 게임오버 누락, Level Select 버튼 신설, 점수/타겟 재밸런스)을 향후 리팩터로부터 보호하기 위한 테스트 묶음.
+
+### 42.1 `_bootstrap.js` 확장
+
+테스트가 키 코드를 매직 넘버로 쓰지 않도록 `S_KEY`, `MENU_KEY`, `LEVEL_SELECT_KEY`, `NEXT_LEVEL_KEY`, `MODE_*_KEY` export 추가.
+
+### 42.2 `draw_engine.test.js` — `getEventCode` 인스턴스 테스트
+
+기존 파일은 정적 메서드만 다루고 있어 히트 테스트 공백이 컸다. 헬퍼 `buildPuzzleGameOver(level, score)`로 게임을 puzzle GAME_OVER에 박아두고 `getEventCode(x, y)`로 직접 코드를 끌어내 검증. 8개 케이스:
+
+- 실패 레이아웃: Retry(280) → `S_KEY`, Level Select(335) → `LEVEL_SELECT_KEY`, Main Menu(390) → `MENU_KEY`, 빈 공간(308) → 0
+- 성공 레이아웃: Next(250) → `NEXT_LEVEL_KEY`, Retry/Level Select/Menu(305/360/415)
+- 최종 레벨(100) cleared는 Next 없이 실패 레이아웃 사용 (`y=250`에서 0)
+- 버튼 열 바깥(x=80, x=320) → 0
+
+### 42.3 `game_engine.test.js` — 게임오버 → 메뉴/레벨선택 전환
+
+39·40장의 회귀 가드. `game.playPuzzleLevel(1) → game.increaseScore → eng.pause → game._enterGameOver`로 GAME_OVER 상태를 만든 뒤:
+
+- `eng.gotoMenu()`가 IDLE로 복귀하고 resume snapshot을 비우는지
+- `eng.gotoLevelSelect()`가 LEVEL_SELECT로 복귀하고 점수가 리셋되는지
+
+### 42.4 결과
+
+199개 → 215개. 누락 영역 보완 + 41장 리밸런스의 모든 정점에 핀 박음.
+
+## 43. 후속 후보
 
 - 남은 JS 파일들도 점진적으로 .ts로 이식 (현재는 ambient 선언으로 우회 중)
 - `flower.js` / `leaf.js` 인덱스 0–6 / 1–6 매핑을 자료구조로 분리해 가독성 정리
@@ -1433,3 +1556,4 @@ if (f._pendingRefill) {
 - 모바일 터치 제스처(스와이프로 회전 등) 검토
 - 황금 꽃잎이 매치되어 사라질 때 별도의 sparkle / coin-pop 이펙트
 - 퍼즐 구제 스폰에 시각 큐(잎이 들어올 때 작은 sparkle 등)로 "도움이 들어왔다" 신호
+- 41장 재밸런스 후 실제 플레이 검증 (특히 L30~70 구간 클리어 가능 여부) 및 필요 시 시간/콤보 보정

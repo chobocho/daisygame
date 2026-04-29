@@ -106,3 +106,42 @@ test("GameEngine.gotoMenu: from LEVEL_SELECT returns to IDLE state", () => {
   eng.gotoMenu();
   assert.equal(game.isIdleState(), true);
 });
+
+// Regression: the puzzle GAME_OVER screen also has a Main Menu button
+// (DrawEngine._hitPuzzleGameOver → MENU_KEY). main.js used to gate MENU_KEY
+// on PAUSE/LEVEL_SELECT only, so the post-fail Main Menu was a dead button.
+test("GameEngine.gotoMenu: from puzzle GAME_OVER returns to IDLE and clears resume", () => {
+  const { db, game, eng } = build();
+  game.playPuzzleLevel(1);
+  game.increaseScore(40);
+  eng.pause(); // writes a resume snapshot
+  assert.notEqual(db.getResume(), null);
+  // Force the game into GAME_OVER as if the puzzle timer expired.
+  game._enterGameOver();
+  assert.equal(game.isGameOverState(), true);
+
+  eng.gotoMenu();
+
+  assert.equal(game.isIdleState(), true);
+  assert.equal(db.getResume(), null);
+});
+
+// New: the puzzle GAME_OVER screen now also exposes a Level Select button
+// so the player can pick a different level after a fail without round-
+// tripping through the main menu. gotoLevelSelect must work from GAME_OVER,
+// not just PAUSE.
+test("GameEngine.gotoLevelSelect: from puzzle GAME_OVER returns to LEVEL_SELECT and clears resume", () => {
+  const { db, game, eng } = build();
+  game.playPuzzleLevel(1);
+  game.increaseScore(40);
+  eng.pause();
+  assert.notEqual(db.getResume(), null);
+  game._enterGameOver();
+  assert.equal(game.isGameOverState(), true);
+
+  eng.gotoLevelSelect();
+
+  assert.equal(game.isLevelSelectState(), true);
+  assert.equal(db.getResume(), null);
+  assert.equal(game.score(), 0, "score resets on bail-out");
+});

@@ -66,6 +66,8 @@ function loadGame() {
       Score, Leaf, Flower, Effects, Puzzle, PuzzleProgress,
       DaisyGame, GameEngine, DrawEngine, LocalDB,
       MODE_ARCADE, MODE_PUZZLE, MODE_ENDLESS,
+      S_KEY, MENU_KEY, LEVEL_SELECT_KEY, NEXT_LEVEL_KEY,
+      MODE_ARCADE_KEY, MODE_PUZZLE_KEY, MODE_ENDLESS_KEY,
       _store, localStorage,
     };
   `;

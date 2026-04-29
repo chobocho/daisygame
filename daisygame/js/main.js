@@ -58,7 +58,8 @@ function processKeyEvent(code) {
       gameEngine.nextPuzzleLevel();
       break;
     case LEVEL_SELECT_KEY:
-      if (daisyGame.isPauseState()) {
+      // Reachable from PAUSE and from the puzzle GAME_OVER screen.
+      if (daisyGame.isPauseState() || daisyGame.isGameOverState()) {
         gameEngine.gotoLevelSelect();
       }
       break;
@@ -88,10 +89,11 @@ function processKeyEvent(code) {
       break;
     case 27: // Escape
     case MENU_KEY:
-      // Reachable from PAUSE (overlay) and LEVEL_SELECT (Main Menu button on
-      // the puzzle grid). Both paths should drop back to the IDLE mode-pick
+      // Reachable from PAUSE (overlay), LEVEL_SELECT (Main Menu button on the
+      // puzzle grid), and GAME_OVER (Main Menu button on the puzzle
+      // cleared/failed screen). All paths drop back to the IDLE mode-pick
       // screen via gameEngine.gotoMenu().
-      if (daisyGame.isPauseState() || daisyGame.isLevelSelectState()) {
+      if (daisyGame.isPauseState() || daisyGame.isLevelSelectState() || daisyGame.isGameOverState()) {
         gameEngine.gotoMenu();
       }
       break;

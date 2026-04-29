@@ -111,17 +111,17 @@ function planForcedMatch(g, color) {
   flowers[1].leaf[3]._life = 15;
 }
 
-// Per-pair score table (color 1..7): 1, 2, 4, 6, 8, 10, 12 — the ramp
-// steepens past color 4 so the high-color matches in puzzle endgame pay
-// off enough to actually clear targets.
-const COLOR_PAIR_SCORE = [0, 1, 2, 4, 6, 8, 10, 12];
+// Per-pair score table (color 1..7): 3, 4, 5, 6, 8, 10, 12 — low colors
+// (1..3) start at 3 so early puzzle levels (only 4 colors in play) don't
+// grind, while the +2 jumps past color 4 keep endgame matches lucrative.
+const COLOR_PAIR_SCORE = [0, 3, 4, 5, 6, 8, 10, 12];
 
-test("DaisyGame: color-1 pair awards 1 point", () => {
+test("DaisyGame: color-1 pair awards 3 points", () => {
   const g = fresh();
   g.start();
   planForcedMatch(g, 1);
   g.turnFlower(0);
-  assert.equal(g.score(), 1);
+  assert.equal(g.score(), 3);
 });
 
 test("DaisyGame: color-7 pair awards 12 points", () => {
@@ -132,7 +132,7 @@ test("DaisyGame: color-7 pair awards 12 points", () => {
   assert.equal(g.score(), 12);
 });
 
-test("DaisyGame: color pair scores follow the 1/2/4/6/8/10/12 ramp", () => {
+test("DaisyGame: color pair scores follow the 3/4/5/6/8/10/12 ramp", () => {
   for (let c = 1; c <= 7; c++) {
     const g = fresh();
     g.start();
@@ -140,6 +140,35 @@ test("DaisyGame: color pair scores follow the 1/2/4/6/8/10/12 ramp", () => {
     g.turnFlower(0);
     assert.equal(g.score(), COLOR_PAIR_SCORE[c],
       `color ${c} should award ${COLOR_PAIR_SCORE[c]} points`);
+  }
+});
+
+// Regression guard: the rebalance specifically lifted colors 1..3 out of
+// the 1/2/4 well so early puzzle levels (which only see 4 colors) are
+// reachable. If a future tweak drops any low color back below 3 these
+// will catch it before tester hands feel it.
+test("DaisyGame: low colors (1..3) always award at least 3 points", () => {
+  for (const c of [1, 2, 3]) {
+    const g = fresh();
+    g.start();
+    planForcedMatch(g, c);
+    g.turnFlower(0);
+    assert.ok(g.score() >= 3,
+      `color ${c} pair must pay >= 3 (got ${g.score()}) — early puzzle would otherwise grind`);
+  }
+});
+
+test("DaisyGame: high colors (5..7) keep the +2 endgame ramp (8/10/12)", () => {
+  // Pins the explicit endgame values so a later "soften early levels"
+  // refactor cannot accidentally flatten the high end.
+  const expected = { 5: 8, 6: 10, 7: 12 };
+  for (const c of [5, 6, 7]) {
+    const g = fresh();
+    g.start();
+    planForcedMatch(g, c);
+    g.turnFlower(0);
+    assert.equal(g.score(), expected[c],
+      `color ${c} pair must still award ${expected[c]}`);
   }
 });
 
@@ -222,7 +251,7 @@ test("DaisyGame: _isPlayable returns true if a rainbow exists on board", () => {
   assert.equal(g._isPlayable(), true);
 });
 
-test("DaisyGame: a single color-3 matched pair awards 4 points", () => {
+test("DaisyGame: a single color-3 matched pair awards 5 points", () => {
   const g = fresh();
   g.start();
   const flowers = g.getFlowers();
@@ -241,7 +270,7 @@ test("DaisyGame: a single color-3 matched pair awards 4 points", () => {
   flowers[1].leaf[3]._color = 3;
   flowers[1].leaf[3]._life = 15;
   g.turnFlower(0);
-  assert.equal(g.score(), 4, "color-3 pair pays 4 per the new ramp");
+  assert.equal(g.score(), 5, "color-3 pair pays 5 per the new ramp");
 });
 
 test("DaisyGame: turnFlower scores when a forced color match is set up", () => {
@@ -971,8 +1000,8 @@ test("DaisyGame: puzzle combo: first match scores at 1.0x", () => {
   stagePuzzlePair(g, 3);
   const before = g.score();
   g.turnFlower(0);
-  // Color-3 pair = 4 base (per the 1/2/4/6/8/10/12 ramp). First match is unboosted.
-  assert.equal(g.score() - before, 4);
+  // Color-3 pair = 5 base (per the 3/4/5/6/8/10/12 ramp). First match is unboosted.
+  assert.equal(g.score() - before, 5);
   assert.equal(g._comboMultiplier, 1.0);
   assert.equal(g._comboCooldown > 0, true, "match arms the chain window");
 });
@@ -1015,7 +1044,7 @@ test("DaisyGame: puzzle combo: chain breaks once the cooldown expires", () => {
   const before = g.score();
   g.turnFlower(0);
   assert.equal(g._comboMultiplier, 1.0, "expired window must reset to 1.0x");
-  assert.equal(g.score() - before, 4, "score reverts to the color-3 base");
+  assert.equal(g.score() - before, 5, "score reverts to the color-3 base");
 });
 
 test("DaisyGame: combo cooldown decrements per tick and expires the multiplier", () => {
@@ -1037,7 +1066,7 @@ test("DaisyGame: arcade mode skips the combo multiplier", () => {
   stagePuzzlePair(g, 3);
   const before = g.score();
   g.turnFlower(0);
-  assert.equal(g.score() - before, 4);
+  assert.equal(g.score() - before, 5);
   assert.equal(g._comboMultiplier, 2.0,
     "arcade match must not bump the chain bookkeeping either");
 });
@@ -1050,7 +1079,7 @@ test("DaisyGame: endless mode skips the combo multiplier", () => {
   stagePuzzlePair(g, 3);
   const before = g.score();
   g.turnFlower(0);
-  assert.equal(g.score() - before, 4);
+  assert.equal(g.score() - before, 5);
 });
 
 test("DaisyGame: playPuzzleLevel resets the combo state", () => {
