@@ -818,6 +818,34 @@ test("DaisyGame: gold does NOT match a normal color (no score, gold survives)", 
   assert.equal(flowers[0].leaf[0].isAlive(), true);
 });
 
+test("DaisyGame: gold-vs-rainbow match reverts the orphaned partner gold leaf", () => {
+  // Gold-vs-rainbow consumes only one of the gold pair. The partner — which
+  // may have drifted to a different slot via prior rotations — must NOT stay
+  // gold once the event ends; without the explicit revert it lingers until
+  // the next gold event happens to expire on top of it.
+  const g = fresh();
+  g.start();
+  clearBoard(g);
+  const flowers = g.getFlowers();
+  flowers[1].set_direction(1);
+  // Pair _leafMap[1] [14, 61]: F1 leaf 4 ↔ F6 leaf 1. CW turn shifts F1[3]
+  // → F1[4]. Stage gold at F1[3] and rainbow at F6[1].
+  flowers[1].leaf[3].setGolden({ color: 5, life: 15, birth: 8 });
+  flowers[1].leaf[3]._life = 15;
+  flowers[6].leaf[1].setRainbow();
+  // Orphan partner sitting on a different flower (simulating a drifted
+  // partner from the original gold pair).
+  flowers[3].leaf[2].setGolden({ color: 7, life: 15, birth: 8 });
+  flowers[3].leaf[2]._life = 15;
+  g._activeGolden = { ticksLeft: 100 };
+  g.turnFlower(1);
+  assert.equal(g.activeGolden(), null, "gold event must end after the match");
+  assert.equal(flowers[3].leaf[2].isGolden(), false,
+    "orphan gold must revert to its snapshot color");
+  assert.equal(flowers[3].leaf[2].color(), 7,
+    "orphan gold must revert to its original snapshot color");
+});
+
 test("DaisyGame: matching a gold pair clears _activeGolden immediately", () => {
   const g = fresh();
   g.start();

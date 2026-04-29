@@ -261,6 +261,7 @@ class DaisyGame {
 
         let removedLeaf = 0;
         let gained = 0;
+        let goldMatched = false;
         const matches = [];
         for (let leaf of this._leafMap[flower]) {
             let left_flower = Math.floor(leaf[0] / 10);
@@ -299,14 +300,22 @@ class DaisyGame {
                 removedLeaf++;
 
                 // Matched gold: the leaves are consumed — drop their snapshot
-                // so a pending expire can't revert them, and end the event.
+                // so the upcoming _expireGolden won't try to revert them.
                 if (llIsGold) ll.clearGoldenState();
                 if (rlIsGold) rl.clearGoldenState();
-                if (isGoldPair) this._activeGolden = null;
+                if (isGoldPair) goldMatched = true;
 
                 matches.push({ x: (lp.x + rp.x) / 2, y: (lp.y + rp.y) / 2, colorIdx: baseColor });
             }
         }
+
+        // Gold-rainbow only consumes one of the two gold leaves; without this
+        // pass the partner is left gold forever (the timer no longer reverts
+        // it once the event is "ended"). Fire _expireGolden which reverts any
+        // still-alive gold leaf and clears _activeGolden — matched gold
+        // leaves are not alive and are skipped, so their shrink animation
+        // continues normally.
+        if (goldMatched) this._expireGolden();
 
         // Puzzle-mode chain combo. Each match within the 1s window compounds
         // a 1.2x multiplier on `gained`. We update the multiplier first so
@@ -839,12 +848,15 @@ class DaisyGame {
     }
 
     // Expire = revert every still-gold leaf on the board. Each leaf carries
-    // its own snapshot, so rotations during the event don't matter.
+    // its own snapshot, so rotations during the event don't matter. Skip
+    // matched gold leaves (isAlive() === false) — they're already mid-shrink
+    // from a checkCollision remove() and reverting them would zero the color
+    // before the dying animation finishes.
     _expireGolden() {
         if (!this._activeGolden) return;
         for (const f of this._flowerArr) {
             for (const l of f.leaf) {
-                if (l.isGolden()) {
+                if (l.isGolden() && l.isAlive()) {
                     const becameEmpty = l.revertFromGolden();
                     if (becameEmpty) f._leaf_count = Math.max(0, f._leaf_count - 1);
                 }

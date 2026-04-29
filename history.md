@@ -1346,7 +1346,37 @@ if (this._mode === this.MODE_PUZZLE && !this._hasMatchablePair()) {
 - 콤보 수학: 색-3 base 4 → ×1.2 = `floor(4.8) = 4` (다음 단계까지는 차이가 없을 수 있음을 확인)
 - 색-5 base 8, gold base 16에서의 콤보 누적
 
-## 37. 후속 후보
+## 37. 황금잎 외톨이 버그 수정
+
+증상 보고: "황금잎은 시간이 지나면 원래 색으로 돌아 와야 하는데 유지 되는거 같아".
+
+### 37.1 원인
+
+황금 페어는 항상 인접한 두 슬롯에 동시 스폰되지만, 이벤트 진행 중 플레이어 회전으로 두 잎은 보드 다른 곳으로 흩어질 수 있다. `checkCollision`은 페어가 매치되면 (gold-gold든 gold-rainbow든) 즉시 `_activeGolden = null`로 이벤트를 종료시켰는데:
+
+- gold-gold 매치는 두 황금잎을 모두 소비 → 외톨이 없음, 정상.
+- **gold-rainbow 매치는 한쪽 황금잎만 소비** → 짝꿍 황금잎이 보드에 남음.
+
+`_activeGolden = null` 이후로는 `_expireGolden()`이 첫 줄(`if (!this._activeGolden) return;`)에서 조기 반환되므로, 외톨이 황금잎의 만료 타이머는 영영 발동하지 않는다. 다음 황금 이벤트가 만료될 때까지(즉 8–13초 뒤) 그대로 황금색으로 남아 사용자에게는 "안 돌아옴"으로 보인다.
+
+### 37.2 수정 (`daisygame.js`)
+
+1. `checkCollision`에서 매치 직후 `_activeGolden = null`을 직접 쓰는 대신 `goldMatched` 플래그를 세우고 루프가 끝난 뒤 `_expireGolden()`을 호출한다. 외톨이 잎을 스냅샷 색으로 되돌리고 `_activeGolden`도 같은 함수가 닫는다.
+2. `_expireGolden`은 `isGolden() && isAlive()` 조건으로 좁힌다. 이미 매치되어 죽기 애니메이션 중인 잎(`isAlive() === false`)을 건너뛰지 않으면 `revertFromGolden`이 즉시 `_color = 0, _life = 0`으로 만들어 shrink 애니메이션이 한 프레임 만에 사라진다.
+
+이 두 변경의 조합으로 매치된 황금잎의 죽는 애니메이션은 기존 그대로, 매치되지 않은 외톨이만 즉시 원색으로 복귀한다.
+
+### 37.3 테스트
+
+`daisygame.test.js`에 "gold-vs-rainbow match reverts the orphaned partner gold leaf" 회귀 테스트 추가:
+
+- 보드를 비우고 F1 leaf 3에 스냅샷 색 5의 황금잎, F6 leaf 1에 무지개잎을 배치(`_leafMap[1]`의 [14, 61] 페어가 CW 회전 후 정렬되도록).
+- 회전과 무관한 F3 leaf 2에 스냅샷 색 7의 외톨이 황금잎을 배치.
+- `g.turnFlower(1)` 호출 후 `activeGolden() === null`, 외톨이가 `isGolden() === false` 그리고 `color() === 7`인 것을 확인.
+
+기존 황금 관련 테스트(매치된 페어가 `_activeGolden`을 즉시 비움, 콤보 카운트, 자연 만료, transformed/empty-fill 만료)는 모두 그대로 통과 — 매치된 잎은 `isAlive() === false`이므로 새 `_expireGolden` 가드에 걸려 건드려지지 않는다.
+
+## 38. 후속 후보
 
 - 남은 JS 파일들도 점진적으로 .ts로 이식 (현재는 ambient 선언으로 우회 중)
 - `flower.js` / `leaf.js` 인덱스 0–6 / 1–6 매핑을 자료구조로 분리해 가독성 정리
