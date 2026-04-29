@@ -240,8 +240,8 @@ class DaisyGame {
         }
 
         // Per-pair score = 2 (base) + color bonus 1..7. Rainbow pairs
-        // award a flat 8; gold pairs award a flat 9 (and take precedence
-        // over rainbow if both wildcards happen to overlap).
+        // award a flat 8; gold pairs award a flat 9. Rainbow is a wildcard
+        // for any color; gold is narrower — it only matches gold or rainbow.
         const COLOR_BONUS = [0, 1, 2, 3, 4, 5, 6, 7];
         const RAINBOW_PAIR_SCORE = 8;
         const GOLDEN_PAIR_SCORE = 9;
@@ -258,15 +258,25 @@ class DaisyGame {
             const ll = this._flowerArr[left_flower].leaf[left_flower_leaf];
             const rl = this._flowerArr[right_flower].leaf[right_flower_leaf];
 
-            // Rainbow / gold leaves act as wildcards — they match any color.
-            const colorMatch = (ll.color() === rl.color()) ||
-                ll.isRainbow() || rl.isRainbow() ||
-                ll.isGolden() || rl.isGolden();
+            const llIsGold = ll.isGolden();
+            const rlIsGold = rl.isGolden();
+            const llIsRainbow = ll.isRainbow();
+            const rlIsRainbow = rl.isRainbow();
+
+            let colorMatch;
+            if (llIsGold || rlIsGold) {
+                // Gold only matches another gold or a rainbow.
+                colorMatch = (llIsGold || llIsRainbow) && (rlIsGold || rlIsRainbow);
+            } else {
+                // Same color, or rainbow as a generic wildcard.
+                colorMatch = (ll.color() === rl.color()) || llIsRainbow || rlIsRainbow;
+            }
+
             if (ll.isAlive() && rl.isAlive() && colorMatch) {
-                const isGolden = ll.isGolden() || rl.isGolden();
-                const isRainbow = !isGolden && (ll.isRainbow() || rl.isRainbow());
-                const baseColor = ll.isRainbow() || ll.isGolden() ? rl.color() : ll.color();
-                gained += isGolden ? GOLDEN_PAIR_SCORE
+                const isGoldPair = llIsGold || rlIsGold;
+                const isRainbow = !isGoldPair && (llIsRainbow || rlIsRainbow);
+                const baseColor = (llIsRainbow || llIsGold) ? rl.color() : ll.color();
+                gained += isGoldPair ? GOLDEN_PAIR_SCORE
                     : (isRainbow ? RAINBOW_PAIR_SCORE : (2 + (COLOR_BONUS[baseColor] || 0)));
 
                 const lp = this._leafScreenPos(left_flower, left_flower_leaf);
@@ -274,12 +284,13 @@ class DaisyGame {
                 this._flowerArr[left_flower].remove(left_flower_leaf);
                 this._flowerArr[right_flower].remove(right_flower_leaf);
                 removedLeaf++;
-                // Matched gold: the active event ends here (no revert).
-                if (this._activeGolden &&
-                    ((this._activeGolden.flower === left_flower && this._activeGolden.idx === left_flower_leaf) ||
-                     (this._activeGolden.flower === right_flower && this._activeGolden.idx === right_flower_leaf))) {
-                    this._activeGolden = null;
-                }
+
+                // Matched gold: the leaves are consumed — drop their snapshot
+                // so a pending expire can't revert them, and end the event.
+                if (llIsGold) ll.clearGoldenState();
+                if (rlIsGold) rl.clearGoldenState();
+                if (isGoldPair) this._activeGolden = null;
+
                 matches.push({ x: (lp.x + rp.x) / 2, y: (lp.y + rp.y) / 2, colorIdx: baseColor });
             }
         }
@@ -621,97 +632,85 @@ class DaisyGame {
             Math.floor(Math.random() * (this.GOLDEN_LIFE_MAX_TICKS - this.GOLDEN_LIFE_MIN_TICKS + 1));
     }
 
-    // Boundary slots = leaf positions named in any _leafMap pair. These are
-    // the only slots where a gold petal touches a neighbouring flower and
-    // can therefore be matched.
-    _collectGoldenBoundarySlots() {
-        const seen = new Set();
-        const slots = [];
-        for (const pairs of this._leafMap) {
-            for (const [a, b] of pairs) {
-                for (const v of [a, b]) {
-                    if (seen.has(v)) continue;
-                    seen.add(v);
-                    const flower = Math.floor(v / 10);
-                    const idx = v % 10;
-                    if (flower >= 0 && flower < this._flowerArr.length && idx >= 0 && idx < 6) {
-                        slots.push({ flower, idx });
-                    }
-                }
-            }
-        }
-        return slots;
-    }
-
+    // Spawn a gold pair across two facing flowers. Each `_leafMap` pair
+    // [a, b] is a candidate; place gold at both endpoints so the two
+    // gold leaves can match each other (gold-only-matches-gold-or-rainbow).
+    // Both endpoints must be empty, or alive non-special leaves we can
+    // safely transform-and-revert.
     _trySpawnGolden() {
         if (this._activeGolden !== null) return false;
-        const boundary = this._collectGoldenBoundarySlots();
-        if (boundary.length === 0) return false;
 
-        // Prefer empty boundary slots — fresh petal, no revert needed.
-        const empties = [];
-        const transformables = [];
-        for (const s of boundary) {
-            const l = this._flowerArr[s.flower].leaf[s.idx];
-            if (l.color() === 0) {
-                empties.push(s);
-            } else if (l.isAlive() && !l.isRainbow() && !l.isGolden()) {
-                transformables.push(s);
+        const candidates = [];
+        const seen = new Set();
+        for (const flower_pairs of this._leafMap) {
+            for (const [aCode, bCode] of flower_pairs) {
+                const key = aCode < bCode ? (aCode + '-' + bCode) : (bCode + '-' + aCode);
+                if (seen.has(key)) continue;
+                seen.add(key);
+
+                const fa = Math.floor(aCode / 10);
+                const ia = aCode % 10;
+                const fb = Math.floor(bCode / 10);
+                const ib = bCode % 10;
+                if (fa >= this._flowerArr.length || fb >= this._flowerArr.length) continue;
+
+                const lA = this._flowerArr[fa].leaf[ia];
+                const lB = this._flowerArr[fb].leaf[ib];
+                if (lA.isRainbow() || lA.isGolden()) continue;
+                if (lB.isRainbow() || lB.isGolden()) continue;
+                // Skip mid-death leaves (color !== 0 yet life decaying) to
+                // avoid stomping on the regular shrink animation.
+                const aOK = lA.color() === 0 || lA.isAlive();
+                const bOK = lB.color() === 0 || lB.isAlive();
+                if (!aOK || !bOK) continue;
+
+                candidates.push({
+                    slotA: { flower: fa, idx: ia },
+                    slotB: { flower: fb, idx: ib },
+                    emptyCount: (lA.color() === 0 ? 1 : 0) + (lB.color() === 0 ? 1 : 0),
+                });
             }
         }
 
-        let pick;
-        let wasEmpty;
-        if (empties.length > 0) {
-            pick = empties[Math.floor(Math.random() * empties.length)];
-            wasEmpty = true;
-        } else if (transformables.length > 0) {
-            pick = transformables[Math.floor(Math.random() * transformables.length)];
-            wasEmpty = false;
-        } else {
-            return false;
+        if (candidates.length === 0) return false;
+
+        // Prefer pairs where more sides are already empty so we minimise the
+        // need to transform and later revert.
+        candidates.sort((x, y) => y.emptyCount - x.emptyCount);
+        const topEmpty = candidates[0].emptyCount;
+        const top = candidates.filter(c => c.emptyCount === topEmpty);
+        const pick = top[Math.floor(Math.random() * top.length)];
+
+        for (const s of [pick.slotA, pick.slotB]) {
+            const f = this._flowerArr[s.flower];
+            const l = f.leaf[s.idx];
+            const wasEmpty = l.color() === 0;
+            const snapshot = wasEmpty ? null : {
+                color: l._color,
+                life: l._life,
+                birth: l._birth,
+            };
+            l.setGolden(snapshot);
+            if (wasEmpty) {
+                l.playBirth();
+                f._leaf_count = Math.min(6, f._leaf_count + 1);
+            }
         }
 
-        const f = this._flowerArr[pick.flower];
-        const l = f.leaf[pick.idx];
-        const snapshot = wasEmpty ? null : {
-            color: l._color,
-            life: l._life,
-            birth: l._birth,
-        };
-
-        l.setGolden();
-        if (wasEmpty) {
-            l.playBirth();
-            f._leaf_count = Math.min(6, f._leaf_count + 1);
-        }
-
-        this._activeGolden = {
-            flower: pick.flower,
-            idx: pick.idx,
-            ticksLeft: this._nextGoldenLifeTicks(),
-            wasEmpty,
-            snapshot,
-        };
+        this._activeGolden = { ticksLeft: this._nextGoldenLifeTicks() };
         return true;
     }
 
+    // Expire = revert every still-gold leaf on the board. Each leaf carries
+    // its own snapshot, so rotations during the event don't matter.
     _expireGolden() {
         if (!this._activeGolden) return;
-        const { flower, idx, wasEmpty, snapshot } = this._activeGolden;
-        const f = this._flowerArr[flower];
-        const l = f.leaf[idx];
-        // The gold leaf might have already been matched (then activeGolden
-        // was cleared). We only act if it's still gold.
-        if (l.isGolden()) {
-            if (wasEmpty) {
-                l._color = 0;
-                l._life = 0;
-                f._leaf_count = Math.max(0, f._leaf_count - 1);
-            } else if (snapshot) {
-                l._color = snapshot.color;
-                l._life = snapshot.life;
-                l._birth = snapshot.birth;
+        for (const f of this._flowerArr) {
+            for (const l of f.leaf) {
+                if (l.isGolden()) {
+                    const becameEmpty = l.revertFromGolden();
+                    if (becameEmpty) f._leaf_count = Math.max(0, f._leaf_count - 1);
+                }
             }
         }
         this._activeGolden = null;
@@ -720,11 +719,8 @@ class DaisyGame {
     activeGolden() {
         if (!this._activeGolden) return null;
         return {
-            flower: this._activeGolden.flower,
-            idx: this._activeGolden.idx,
             ticksLeft: this._activeGolden.ticksLeft,
             dyingTicks: this.GOLDEN_DYING_TICKS,
-            wasEmpty: this._activeGolden.wasEmpty,
         };
     }
 
@@ -792,6 +788,9 @@ class DaisyGame {
     }
 
     serialize() {
+        // Resolve any in-flight gold event so the snapshot doesn't capture
+        // half a transient state. Resume will simply not see it.
+        if (this._activeGolden) this._expireGolden();
         return {
             v: 1,
             mode: this._mode,
@@ -846,6 +845,11 @@ class DaisyGame {
             this._leafMap[i] = this.FULL_LEAF_MAP[i].filter(([a, b]) =>
                 Math.floor(a / 10) < N && Math.floor(b / 10) < N);
         }
+
+        // Resume starts with no gold event in flight; the cooldown re-arms
+        // and the next 8s window will spawn a fresh pair.
+        this._goldenCooldown = this.GOLDEN_INTERVAL_TICKS;
+        this._activeGolden = null;
 
         // Always come back paused so the player explicitly resumes.
         this._state = this.PAUSE_STATE;

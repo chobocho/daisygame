@@ -50,11 +50,8 @@ interface LeafLike {
 }
 
 interface ActiveGolden {
-  flower: number;
-  idx: number;
   ticksLeft: number;
   dyingTicks: number;
-  wasEmpty: boolean;
 }
 
 interface FlowerLike {

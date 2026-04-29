@@ -985,7 +985,149 @@ if (this._hasRainbow() || this._hasGolden()) return true;
 - 모노크롬 보드여도 황금이 있으면 `_isPlayable() === true`
 - `init` / `playPuzzleLevel`이 쿨다운/활성 상태 리셋
 
-## 30. 후속 후보
+## 30. 황금 잎 페어 매칭 — gold↔gold/rainbow only
+
+피드백: "황금색은 황금색 혹은 무지개색이랑 매칭 대어야해. 그래서 황금색은 생길때 마주하는 2개의 꽃에서 생겨야 해."
+
+29번에서 도입한 황금 잎은 와일드카드 동작(어떤 색과도 매치) + 단일 잎 스폰이었음. 이제 두 가지를 동시에 변경:
+
+### 30.1 매치 규칙 변경 (`checkCollision`)
+
+```js
+if (llIsGold || rlIsGold) {
+    // Gold only matches another gold or a rainbow.
+    colorMatch = (llIsGold || llIsRainbow) && (rlIsGold || rlIsRainbow);
+} else {
+    colorMatch = (ll.color() === rl.color()) || llIsRainbow || rlIsRainbow;
+}
+```
+
+황금이 일반 색상과 매치되지 않음 → 황금 잎 한 장만 보드에 있으면 일반적으로 매치 불가. 그래서 "마주하는 2개의 꽃" 페어로 스폰해야 매치 가능.
+
+레인보우 잎의 와일드카드 동작은 그대로 유지 (모든 색과 매치). 황금 vs 레인보우는 황금 점수(9) 우선.
+
+### 30.2 페어 스폰 (`_trySpawnGolden`)
+
+`_collectGoldenBoundarySlots()` (단일 슬롯 수집) 제거. 대신 `_leafMap`을 직접 순회하며 페어 후보 수집:
+
+```js
+for (const flower_pairs of this._leafMap) {
+    for (const [aCode, bCode] of flower_pairs) {
+        // 양쪽이 모두 빈 슬롯이거나 살아있는 일반 잎이어야 후보
+        // (레인보우/황금/사망 진행 중 잎은 제외)
+        candidates.push({ slotA, slotB, emptyCount });
+    }
+}
+```
+
+스폰 시 페어 양쪽 모두에 `setGolden(snapshot)` 호출 — 두 장 동시 생성. 우선순위: 양쪽 빈 슬롯 페어 → 한쪽 빈 + 한쪽 alive → 양쪽 alive 변환.
+
+### 30.3 회전 안전한 스냅샷 — `Leaf`에 저장
+
+29번에서는 `_activeGolden = {flower, idx, ..., snapshot}`이 슬롯 포지션을 들고 있었음. 페어 도입 후 잎이 회전으로 다른 슬롯에 옮겨가도 정확히 복구해야 하므로 스냅샷을 **잎 객체 자체**에 저장.
+
+```js
+// leaf.js
+setGolden(snapshot) {
+    this._color = 9;
+    this._life = this._origin_life;
+    this._goldSnapshot = snapshot || null;  // null = 빈 슬롯이었음
+}
+
+revertFromGolden() {
+    if (this._color !== 9) return false;
+    const snap = this._goldSnapshot;
+    this._goldSnapshot = null;
+    if (snap) {
+        this._color = snap.color;
+        this._life = snap.life;
+        this._birth = snap.birth;
+        return false;  // 다른 색으로 복구
+    }
+    this._color = 0;
+    this._life = 0;
+    return true;  // 슬롯이 비어졌음 → caller가 leaf_count 감소
+}
+
+clearGoldenState() {
+    this._goldSnapshot = null;  // 매치되어 사라질 때 호출
+}
+```
+
+`flower.turn()`이 잎 배열을 회전시켜도 잎 객체 자체가 이동하므로 `_goldSnapshot`이 같이 따라감. 만료 시 `_expireGolden`이 보드를 스캔해 모든 황금 잎을 revert.
+
+### 30.4 `_activeGolden` 단순화
+
+이제 슬롯 정보 없이 `{ticksLeft}`만:
+
+```js
+this._activeGolden = { ticksLeft: this._nextGoldenLifeTicks() };
+```
+
+`activeGolden()` API도 `{ticksLeft, dyingTicks}`로 축소. draw 엔진은 슬롯 매칭 검사 없이 모든 황금 잎에 dying 진행률을 일괄 적용.
+
+### 30.5 매치된 황금의 시각 분기
+
+황금 잎의 라이프 상태에 따라 세 갈래 렌더링:
+
+```ts
+if (matched) {
+    // life < origin → 일반 잎과 같은 shrink 애니메이션
+    scale = lifeFrac * birthFrac;
+    alpha = 1;
+} else if (ag && ag.ticksLeft <= ag.dyingTicks) {
+    // 활성 + 마지막 12틱 → grow + fade 만료 이펙트
+    const dyingProg = 1 - Math.max(0, ag.ticksLeft) / ag.dyingTicks;
+    scale = birthFrac * (1 + dyingProg * 0.7);
+    alpha = 1 - dyingProg;
+} else {
+    // 활성 + 풀 라이프 → 정상 크기
+    scale = birthFrac;
+    alpha = 1;
+}
+```
+
+매치되어 사라지는 황금은 grow 안 함 — 일반 매치 잎과 동일한 shrink. 시간 만료로 사라지는 황금만 grow + fade.
+
+### 30.6 serialize/restore 정리
+
+`serialize()`가 활성 황금이 있으면 `_expireGolden`을 호출해 미리 정리 — 변환된 잎은 원래 색으로 돌아간 상태로 스냅샷됨. resume 시 transient 이벤트는 사라지고 cooldown은 새로 시작.
+
+```js
+serialize() {
+    if (this._activeGolden) this._expireGolden();
+    return { ... };
+}
+
+restore(d) {
+    // ...
+    this._goldenCooldown = this.GOLDEN_INTERVAL_TICKS;
+    this._activeGolden = null;
+    this._state = this.PAUSE_STATE;
+}
+```
+
+### 30.7 테스트 (160건, +2)
+
+29번 테스트들을 새 의미체계로 다시 작성:
+- `_trySpawnGolden`이 항상 정확히 2장 스폰, 두 잎이 다른 꽃에 위치
+- 두 잎의 슬롯이 `_leafMap` 페어를 이룸
+- 빈 보드 → 양쪽 모두 wasEmpty (snapshot null)
+- 가득 찬 보드 → 양쪽 모두 변환 + 스냅샷 보유
+- 레인보우 잎이 있는 슬롯은 페어 후보에서 제외
+- 만료 시 양쪽 모두 빈 슬롯이면 둘 다 비움 + leaf_count 감소
+- 만료 시 양쪽 모두 변환이면 둘 다 원래 색 복구
+- 황금-황금 매치 → 9점
+- 황금-레인보우 매치 → 9점 (황금 우선)
+- **(새로) 황금 vs 일반색 → 매치 안 됨, 황금 그대로 살아있음**
+- 매치 시 `_activeGolden = null` 즉시 정리
+- `_isPlayable`이 황금 페어만으로도 true
+- `init` / `playPuzzleLevel` 리셋
+- **(새로) `serialize`가 활성 황금을 사전 만료 → 변환된 잎이 원래 색으로 복구된 상태로 직렬화**
+
+기존 `clearBoard` 헬퍼는 `_leaf_count`를 0으로 리셋하지 않도록 수정 — 그러지 않으면 일곱 꽃이 모두 빈 상태로 보여 `_playEffectSound`의 monochrome 보너스(`scoreTable[7] = 1216`)가 발동해 단일 페어 점수 검증을 흐트림.
+
+## 31. 후속 후보
 
 - 남은 JS 파일들도 점진적으로 .ts로 이식 (현재는 ambient 선언으로 우회 중)
 - `flower.js` / `leaf.js` 인덱스 0–6 / 1–6 매핑을 자료구조로 분리해 가독성 정리

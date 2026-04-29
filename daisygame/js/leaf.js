@@ -14,6 +14,9 @@ class Leaf {
         // existing code paths and tests don't see a transient zero size.
         this._birthMax = 8;
         this._birth = this._birthMax;
+        // Filled by setGolden when this leaf transforms from a normal color.
+        // null while the leaf isn't gold (or was an empty-slot fill).
+        this._goldSnapshot = null;
     }
 
     playBirth() {
@@ -37,16 +40,41 @@ class Leaf {
         return this._color === 8;
     }
 
-    // Golden leaf: a temporary 9-point wildcard event. Color 9 is reserved.
-    // The 2..5s lifetime and grow-and-fade revert/clear are driven from
-    // DaisyGame._activeGolden — the leaf itself just owns the color flag.
-    setGolden() {
+    // Golden leaf (color 9): a paired 9-point match event that only matches
+    // another gold or a rainbow. Snapshot is stored on the leaf so it follows
+    // the leaf object through rotations — DaisyGame can revert correctly even
+    // after the leaf shifts to a different slot index.
+    //   snapshot === null  → slot was empty before; revert clears it.
+    //   snapshot !== null  → slot held an alive leaf; revert restores it.
+    setGolden(snapshot) {
         this._color = 9;
         this._life = this._origin_life;
+        this._goldSnapshot = snapshot || null;
     }
 
     isGolden() {
         return this._color === 9;
+    }
+
+    // Returns true iff the slot becomes empty (caller decrements leaf_count).
+    revertFromGolden() {
+        if (this._color !== 9) return false;
+        const snap = this._goldSnapshot;
+        this._goldSnapshot = null;
+        if (snap) {
+            this._color = snap.color;
+            this._life = snap.life;
+            this._birth = snap.birth;
+            return false;
+        }
+        this._color = 0;
+        this._life = 0;
+        return true;
+    }
+
+    // Called on match-removal so a later expire won't try to revert the leaf.
+    clearGoldenState() {
+        this._goldSnapshot = null;
     }
 
     // Render-side helpers — exposed so the draw engine can play different

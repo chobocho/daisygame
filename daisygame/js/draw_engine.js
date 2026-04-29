@@ -890,20 +890,29 @@ class DrawEngine {
                 continue;
             }
             if (leaf.isGolden()) {
-                // Gold petal — usually drawn at full size during its 2..5s life.
-                // The active-golden record from DaisyGame tells us if we're inside
-                // the trailing dying window, in which case we play a grow + fade
-                // identical in feel to the rainbow death animation.
+                // Gold petal — three render states, all driven from leaf life +
+                // the (event-wide) activeGolden tick window:
+                //   matched (life < origin)        → regular shrink animation
+                //   active in last GOLDEN_DYING_TICKS → grow + fade expiry
+                //   active otherwise               → full-size petal
                 const ag = this.game.activeGolden();
+                const lifeFrac = leaf.get_life_ratio();
                 const birthFrac = leaf.get_birth_ratio();
-                let scale = birthFrac;
-                let alpha = 1;
-                if (ag &&
-                    ag.flower === flower.index && ag.idx === i &&
-                    ag.ticksLeft <= ag.dyingTicks && ag.dyingTicks > 0) {
+                const matched = !leaf.isAlive() && lifeFrac > 0;
+                let scale;
+                let alpha;
+                if (matched) {
+                    scale = lifeFrac * birthFrac;
+                    alpha = 1;
+                }
+                else if (ag && ag.dyingTicks > 0 && ag.ticksLeft <= ag.dyingTicks) {
                     const dyingProg = 1 - Math.max(0, ag.ticksLeft) / ag.dyingTicks;
                     scale = birthFrac * (1 + dyingProg * 0.7);
                     alpha = 1 - dyingProg;
+                }
+                else {
+                    scale = birthFrac;
+                    alpha = 1;
                 }
                 if (scale <= 0 || alpha <= 0)
                     continue;
