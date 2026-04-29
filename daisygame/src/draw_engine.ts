@@ -41,6 +41,36 @@ class DrawEngine {
     { base: "#FFA559", light: "#FFC993", dark: "#E07F1F", outline: "rgba(140,60,0,0.35)" },
   ];
 
+  // Per-slot palettes for the puzzle timer petal stack (12 slots, slot 0 =
+  // bottom). Single warm coral hue, lightened toward white at higher slots
+  // so the stack reads top-pale → bottom-deep. Pre-computed once at class
+  // load so the draw loop just indexes — no per-frame string allocation.
+  private static readonly PUZZLE_TIMER_PALETTES: ReadonlyArray<PetalColor> = (() => {
+    const N = 12;
+    const MAX_LIGHTEN = 0.7;
+    const baseRGB: [number, number, number] = [220, 79, 44];   // #DC4F2C
+    const lightRGB: [number, number, number] = [255, 171, 133]; // #FFAB85
+    const darkRGB: [number, number, number] = [142, 42, 20];    // #8E2A14
+    const lerp = (c: [number, number, number], t: number): string => {
+      const r = Math.round(c[0] + (255 - c[0]) * t);
+      const g = Math.round(c[1] + (255 - c[1]) * t);
+      const b = Math.round(c[2] + (255 - c[2]) * t);
+      return `rgb(${r}, ${g}, ${b})`;
+    };
+    const out: PetalColor[] = [];
+    for (let i = 0; i < N; i++) {
+      // i=0 (bottom) → t=0 (full saturation). i=N-1 (top) → t=MAX_LIGHTEN.
+      const t = (i / (N - 1)) * MAX_LIGHTEN;
+      out.push({
+        base: lerp(baseRGB, t),
+        light: lerp(lightRGB, t),
+        dark: lerp(darkRGB, t),
+        outline: "rgba(120, 40, 20, 0.55)",
+      });
+    }
+    return out;
+  })();
+
   // Body font stacks shared across HUD/title.
   private static readonly UI_FONT = '"Trebuchet MS", "Segoe UI", Verdana, sans-serif';
   private static readonly TITLE_FONT = '"Brush Script MT", "Lucida Handwriting", "Comic Sans MS", cursive';
@@ -411,8 +441,6 @@ class DrawEngine {
     const SPACING = 22;
     const PETAL_LEN = 22;
     const PETAL_WID = 12;
-    // Cycle through pleasant in-game leaf colors for visual variety.
-    const COLOR_CYCLE = [2, 5, 4, 6, 7, 3];
 
     const secF = this.game.timerSecondsFloat();
     const displayedCount = Math.min(PETAL_COUNT, Math.ceil(secF / SEC_PER_PETAL));
@@ -426,7 +454,8 @@ class DrawEngine {
       for (let i = 0; i < displayedCount; i++) {
         const slotFromBottom = i;
         const py = STACK_TOP_Y + (PETAL_COUNT - 1 - slotFromBottom) * SPACING;
-        const palette = DrawEngine.PETAL_COLORS[COLOR_CYCLE[i % COLOR_CYCLE.length]];
+        // Slot 0 = bottom = darkest; slot 11 = top = palest.
+        const palette = DrawEngine.PUZZLE_TIMER_PALETTES[i];
         if (!palette) continue;
         const isTop = i === displayedCount - 1;
 
