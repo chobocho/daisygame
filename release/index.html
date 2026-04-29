@@ -1055,12 +1055,14 @@ class DaisyGame {
             return;
         }
 
-        // Per-pair score = 2 (base) + color bonus 1..7. Rainbow pairs
-        // award a flat 8; gold pairs award a flat 9. Rainbow is a wildcard
-        // for any color; gold is narrower — it only matches gold or rainbow.
-        const COLOR_BONUS = [0, 1, 2, 3, 4, 5, 6, 7];
-        const RAINBOW_PAIR_SCORE = 8;
-        const GOLDEN_PAIR_SCORE = 9;
+        // Per-pair score: explicit table indexed by leaf color (1..7).
+        // The ramp steepens past color 4 so rare high-color matches in the
+        // puzzle endgame pay off enough to actually clear targets. Rainbow
+        // is a wildcard for any color (flat 7); gold is narrower — only
+        // matches gold or rainbow — and rewards 16.
+        const COLOR_PAIR_SCORE = [0, 1, 2, 4, 6, 8, 10, 12];
+        const RAINBOW_PAIR_SCORE = 7;
+        const GOLDEN_PAIR_SCORE = 16;
 
         let removedLeaf = 0;
         let gained = 0;
@@ -1093,7 +1095,7 @@ class DaisyGame {
                 const isRainbow = !isGoldPair && (llIsRainbow || rlIsRainbow);
                 const baseColor = (llIsRainbow || llIsGold) ? rl.color() : ll.color();
                 gained += isGoldPair ? GOLDEN_PAIR_SCORE
-                    : (isRainbow ? RAINBOW_PAIR_SCORE : (2 + (COLOR_BONUS[baseColor] || 0)));
+                    : (isRainbow ? RAINBOW_PAIR_SCORE : (COLOR_PAIR_SCORE[baseColor] || 0));
 
                 const lp = this._leafScreenPos(left_flower, left_flower_leaf);
                 const rp = this._leafScreenPos(right_flower, right_flower_leaf);
